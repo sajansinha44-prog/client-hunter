@@ -1,133 +1,970 @@
+
 import streamlit as st
-import pandas as pd
-import urllib.parse
+import requests
+import sqlite3
+import json
+import re
+from datetime import datetime
+from urllib.parse import urlparse
+
+# =========================================================
+# NEXUS AI — CLIENT HUNTER
+# SINGLE FILE APP
+# =========================================================
 
 st.set_page_config(
-    page_title="NEXUS AI | Zero-Cost Client Closer",
+    page_title="NEXUS AI — Client Hunter",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded",
 )
+
+DB_FILE = "nexus_client_hunter.db"
+
+
+# =========================================================
+# PREMIUM UI
+# =========================================================
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-    * { font-family: 'Plus Jakarta Sans', sans-serif; }
-    .stApp {
-        background: radial-gradient(circle at 10% 20%, rgb(18, 20, 32) 0%, rgb(11, 13, 19) 90.2%);
-        color: #F3F4F6;
-    }
-    .hero-container {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        padding: 22px;
-        border-radius: 18px;
-        backdrop-filter: blur(12px);
-        margin-bottom: 20px;
-    }
-    .hero-title {
-        font-size: 26px;
-        font-weight: 800;
-        background: linear-gradient(90deg, #60A5FA, #A78BFA, #F472B6);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    div.stButton > button:first-child {
-        background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%) !important;
-        color: white !important;
-        font-weight: 700 !important;
-        border-radius: 12px !important;
-        border: none !important;
-        padding: 12px 24px !important;
-        width: 100% !important;
-    }
-    .action-btn {
-        display: block;
-        text-align: center;
-        background: #25D366;
-        color: white !important;
-        font-weight: 700;
-        padding: 12px;
-        border-radius: 10px;
-        text-decoration: none;
-        margin-top: 8px;
-    }
-    .mail-btn {
-        display: block;
-        text-align: center;
-        background: #EA4335;
-        color: white !important;
-        font-weight: 700;
-        padding: 12px;
-        border-radius: 10px;
-        text-decoration: none;
-        margin-top: 8px;
-    }
+.stApp {
+    background:
+        radial-gradient(circle at top right, #172033 0%, #080b12 35%),
+        #080b12;
+    color: #f4f7fb;
+}
+
+section[data-testid="stSidebar"] {
+    background: #0b1018;
+    border-right: 1px solid #202b3c;
+}
+
+.block-container {
+    max-width: 1450px;
+    padding-top: 1.5rem;
+}
+
+.nexus-title {
+    font-size: 38px;
+    font-weight: 900;
+    letter-spacing: -1.5px;
+}
+
+.nexus-sub {
+    color: #8e9caf;
+    font-size: 15px;
+}
+
+.card {
+    background: linear-gradient(145deg, #121925, #0c1119);
+    border: 1px solid #222d3f;
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.metric {
+    background: #101722;
+    border: 1px solid #222d3f;
+    border-radius: 16px;
+    padding: 18px;
+    min-height: 105px;
+}
+
+.metric-number {
+    font-size: 30px;
+    font-weight: 900;
+}
+
+.metric-label {
+    color: #8c98aa;
+    font-size: 13px;
+}
+
+.hot {
+    background: #241b0d;
+    border: 1px solid #69511c;
+    border-radius: 18px;
+    padding: 20px;
+}
+
+.green {
+    color: #63e6a5;
+    font-weight: 800;
+}
+
+.yellow {
+    color: #ffd166;
+    font-weight: 800;
+}
+
+.red {
+    color: #ff7777;
+    font-weight: 800;
+}
+
+.muted {
+    color: #8995a8;
+    font-size: 12px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-BOT_LINK = "https://cdn.botpress.cloud/webchat/v5.0/shareable.html?configUrl=https://files.bpcontent.cloud/2026/09/06/14/20260906142629-5TMDYTSH.json"
 
-st.markdown("""
-<div class="hero-container">
-    <div class="hero-title">⚡ NEXUS AI // 100% FREE CLIENT HUNTER</div>
-    <div style="color: #9CA3AF; font-size: 13px;">बिना किसी खर्चे के — शहर और बिज़नेस चुनिए, 1-क्लिक में सीधा संदेश भेजिए</div>
-</div>
-""", unsafe_allow_html=True)
+# =========================================================
+# DATABASE
+# =========================================================
 
-col1, col2 = st.columns(2)
-with col1:
-    category = st.text_input("🎯 व्यवसाय की श्रेणी (Category)", value="Gym")
-with col2:
-    city = st.text_input("📍 शहर / इलाका (City)", value="Rohini, Delhi")
+def get_db():
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# Google Maps पर 1-क्लिक में असली बिज़नेस खोलने का लिंक
-search_query = urllib.parse.quote(f"{category} in {city}")
-maps_url = f"https://www.google.com/maps/search/{search_query}"
 
-st.markdown(f"""
-<a href="{maps_url}" target="_blank" style="display:block; text-align:center; background: rgba(59, 130, 246, 0.15); border: 1px solid #3B82F6; color: #60A5FA; padding: 10px; border-radius: 10px; text-decoration: none; font-weight: 600; margin-bottom: 15px;">
-    📍 {city} के सभी असली {category} Google Maps पर खोलें (फ़ोन नंबर और रेटिंग देखने हेतु)
-</a>
-""", unsafe_allow_html=True)
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
 
-st.subheader("⚡ 1-Click Client Closer")
-biz_name = st.text_input("क्लाइंट/दुकान का नाम (Maps से देखकर लिखें):", value=f"Target {category}")
-client_phone = st.text_input("क्लाइंट का WhatsApp नंबर (उदा: 919876543210):", value="")
-client_email = st.text_input("क्लाइंट का Email (वैकल्पिक):", value="")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            business_name TEXT,
+            person_name TEXT,
+            country TEXT,
+            city TEXT,
+            category TEXT,
+            website TEXT,
+            source_url TEXT,
+            contact_method TEXT,
+            detected_problem TEXT,
+            recommended_service TEXT,
+            lead_score INTEGER DEFAULT 0,
+            ai_reason TEXT,
+            status TEXT DEFAULT 'NEW',
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
 
-lang = st.radio("आउटरीच भाषा:", ["हिंदी (India)", "English (Global)"], horizontal=True)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id INTEGER,
+            channel TEXT,
+            message TEXT,
+            status TEXT DEFAULT 'DRAFT',
+            created_at TEXT
+        )
+    """)
 
-if lang == "हिंदी (India)":
-    pitch = (
-        f"नमस्ते {biz_name} टीम,\n\n"
-        f"हमने {city} में आपके व्यवसाय की ऑनलाइन प्रोफाइल देखी। हमें लगा कि आपकी Google Maps रैंकिंग और सोशल मीडिया रील्स पर काम करके आपके ग्राहकों की संख्या काफी बढ़ाई जा सकती है।\n\n"
-        f"आपकी मुख्य चुनौती क्या है, यह समझने और समाधान देखने के लिए हमारे AI कंसल्टेंट से अभी चैट करें:\n"
-        f"👉 {BOT_LINK}\n\nधन्यवाद!"
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS replies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id INTEGER,
+            reply TEXT,
+            classification TEXT,
+            summary TEXT,
+            next_action TEXT,
+            created_at TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
+# =========================================================
+# BASIC HELPERS
+# =========================================================
+
+def now():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def clean(value, limit=1000):
+    if value is None:
+        return ""
+    return str(value).strip()[:limit]
+
+
+def clean_url(url):
+    if not url:
+        return ""
+
+    url = url.strip()
+
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    return url
+
+
+def valid_url(url):
+    try:
+        parsed = urlparse(clean_url(url))
+        return (
+            parsed.scheme in ("http", "https")
+            and bool(parsed.netloc)
+        )
+    except Exception:
+        return False
+
+
+def score_class(score):
+    if score >= 75:
+        return "green"
+    if score >= 50:
+        return "yellow"
+    return "red"
+
+
+def get_gemini_key():
+    try:
+        return st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        return ""
+
+
+# =========================================================
+# GEMINI AI
+# =========================================================
+
+def gemini(prompt):
+    key = get_gemini_key()
+
+    if not key:
+        return None, "GEMINI_API_KEY is not configured."
+
+    model = "gemini-3.7-flash"
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/"
+        f"models/{model}:generateContent"
     )
-else:
-    pitch = (
-        f"Hello Team {biz_name},\n\n"
-        f"We reviewed your business profile in {city}. We noticed your digital presence could generate significantly more footfall and leads.\n\n"
-        f"To discuss your bottlenecks and get a tailored solution, chat with our AI consultant here:\n"
-        f"👉 {BOT_LINK}\n\nBest regards!"
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1400
+        }
+    }
+
+    try:
+        response = requests.post(
+            url,
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": key
+            },
+            json=payload,
+            timeout=40
+        )
+
+        if response.status_code != 200:
+            return None, f"Gemini API error: {response.status_code}"
+
+        data = response.json()
+
+        text = (
+            data
+            .get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+        )
+
+        if not text:
+            return None, "Gemini returned an empty response."
+
+        return text.strip(), None
+
+    except Exception as e:
+        return None, f"AI connection error: {e}"
+
+
+def gemini_json(prompt):
+
+    text, error = gemini(
+        prompt + """
+
+IMPORTANT:
+Return ONLY valid JSON.
+Do not use markdown.
+Do not use ```json.
+Do not add explanations outside JSON.
+"""
     )
 
-st.text_area("तैयार संदेश (बॉट लिंक शामिल):", value=pitch, height=180)
+    if error:
+        return None, error
 
-col_b1, col_b2 = st.columns(2)
-with col_b1:
-    if client_phone:
-        clean_phone = client_phone.replace("+", "").replace(" ", "")
-        wa_url = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(pitch)}"
-        st.markdown(f'<a href="{wa_url}" target="_blank" class="action-btn">💬 सीधे WhatsApp पर भेजें</a>', unsafe_allow_html=True)
-    else:
-        st.caption("WhatsApp पर भेजने के लिए ऊपर नंबर भरें।")
+    try:
+        text = text.strip()
 
-with col_b2:
-    if client_email:
-        mailto_url = f"mailto:{client_email}?subject=Growth inquiry regarding {biz_name}&body={urllib.parse.quote(pitch)}"
-        st.markdown(f'<a href="{mailto_url}" target="_blank" class="mail-btn">✉️ सीधे मेल ऐप से भेजें</a>', unsafe_allow_html=True)
-    else:
-        st.caption("ईमेल भेजने के लिए ऊपर ईमेल भरें।")
+        text = re.sub(
+            r"^```json\s*",
+            "",
+            text,
+            flags=re.I
+        )
+
+        text = re.sub(
+            r"^```\s*",
+            "",
+            text
+        )
+
+        text = re.sub(
+            r"\s*```$",
+            "",
+            text
+        )
+
+        return json.loads(text), None
+
+    except Exception:
+        return None, "AI returned invalid JSON."
+
+
+# =========================================================
+# WEBSITE AUDIT
+# =========================================================
+
+def audit_website(url):
+
+    if not valid_url(url):
+        return {
+            "reachable": False,
+            "status": None,
+            "title": "",
+            "description": "",
+            "problems": [
+                "No valid public website URL."
+            ]
+        }
+
+    url = clean_url(url)
+
+    try:
+
+        response = requests.get(
+            url,
+            timeout=12,
+            allow_redirects=True,
+            headers={
+                "User-Agent":
+                    "Mozilla/5.0 NEXUS-AI-Client-Hunter"
+            }
+        )
+
+        html = response.text[:500000]
+
+        title_match = re.search(
+            r"<title[^>]*>(.*?)</title>",
+            html,
+            re.I | re.S
+        )
+
+        description_match = re.search(
+            r'<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']',
+            html,
+            re.I | re.S
+        )
+
+        title = ""
+
+        if title_match:
+            title = re.sub(
+                r"\s+",
+                " ",
+                title_match.group(1)
+            ).strip()
+
+        description = ""
+
+        if description_match:
+            description = re.sub(
+                r"\s+",
+                " ",
+                description_match.group(1)
+            ).strip()
+
+        lower = html.lower()
+
+        problems = []
+
+        if len(title) < 5:
+            problems.append(
+                "Website title appears missing or weak."
+            )
+
+        if not description:
+            problems.append(
+                "Meta description was not detected."
+            )
+
+        if "viewport" not in lower:
+            problems.append(
+                "Mobile viewport tag was not detected."
+            )
+
+        if not re.search(
+            r"(contact|book|quote|call|appointment|get started|schedule)",
+            lower
+        ):
+            problems.append(
+                "Clear contact/CTA signal was not detected."
+            )
+
+        if not problems:
+            problems.append(
+                "No obvious basic issue detected."
+            )
+
+        return {
+            "reachable": True,
+            "status": response.status_code,
+            "title": title,
+            "description": description,
+            "problems": problems
+        }
+
+    except Exception as e:
+
+        return {
+            "reachable": False,
+            "status": None,
+            "title": "",
+            "description": "",
+            "problems": [
+                f"Website audit failed: {e}"
+            ]
+        }
+
+
+# =========================================================
+# AI LEAD QUALIFICATION
+# =========================================================
+
+def qualify_lead(lead):
+
+    prompt = f"""
+You are an expert B2B sales qualification AI.
+
+Business:
+{lead.get("business_name", "")}
+
+Category:
+{lead.get("category", "")}
+
+Country:
+{lead.get("country", "")}
+
+City:
+{lead.get("city", "")}
+
+Website:
+{lead.get("website", "")}
+
+Website audit:
+{json.dumps(lead.get("audit", {}))}
+
+Evaluate whether this business could reasonably need:
+
+1. Website creation
+2. Website redesign
+3. AI automation
+4. Lead generation
+5. Business automation
+
+Never invent information.
+
+Return exactly:
+
+{{
+    "score": 0,
+    "problem": "short factual opportunity",
+    "service": "best recommended service",
+    "reason": "short explanation"
+}}
+"""
+
+    data, error = gemini_json(prompt)
+
+    if error or not data:
+
+        return {
+            "score": 50,
+            "problem":
+                "Potential website or automation opportunity.",
+            "service":
+                "Website + AI automation",
+            "reason":
+                "AI qualification unavailable; manual review recommended."
+        }
+
+    try:
+        score = int(data.get("score", 50))
+    except Exception:
+        score = 50
+
+    score = max(0, min(100, score))
+
+    return {
+        "score": score,
+        "problem":
+            clean(data.get("problem"), 500),
+        "service":
+            clean(data.get("service"), 250),
+        "reason":
+            clean(data.get("reason"), 600)
+    }
+
+
+# =========================================================
+# AI OUTREACH
+# =========================================================
+
+def create_message(lead, channel):
+
+    prompt = f"""
+Create a concise, natural B2B outreach message.
+
+Business:
+{lead.get("business_name")}
+
+Category:
+{lead.get("category")}
+
+City:
+{lead.get("city")}
+
+Website:
+{lead.get("website")}
+
+Detected opportunity:
+{lead.get("detected_problem")}
+
+Recommended service:
+{lead.get("recommended_service")}
+
+Channel:
+{channel}
+
+Rules:
+- Maximum 100 words.
+- Human and professional.
+- Personalize using only supplied information.
+- Mention one real opportunity.
+- No fake claims.
+- No guaranteed results.
+- No fake urgency.
+- No spam language.
+- Offer a quick idea/demo.
+"""
+
+    text, error = gemini(prompt)
+
+    if error:
+
+        return (
+            f"Hi, I came across "
+            f"{lead.get('business_name', 'your business')} "
+            f"and noticed a possible opportunity around "
+            f"{lead.get('detected_problem', 'your website')}. "
+            f"I help businesses with "
+            f"{lead.get('recommended_service', 'websites and automation')}. "
+            f"I'd be happy to share a quick idea if you're interested."
+        )
+
+    return text
+
+
+# =========================================================
+# AI REPLY ANALYSIS
+# =========================================================
+
+def analyze_reply(reply):
+
+    prompt = f"""
+Analyze this business reply.
+
+Reply:
+{reply}
+
+Choose ONE classification:
+
+INTERESTED
+WANTS PRICE
+WANTS A CALL
+NEEDS MORE INFORMATION
+MAYBE LATER
+NOT INTERESTED
+SPAM
+UNKNOWN
+
+Return:
+
+{{
+    "classification": "ONE OF THE ABOVE",
+    "summary": "short summary",
+    "next_action": "short recommended next step"
+}}
+"""
+
+    data, error = gemini_json(prompt)
+
+    if error or not data:
+
+        return {
+            "classification": "UNKNOWN",
+            "summary": "AI analysis unavailable.",
+            "next_action": "Review the reply manually."
+        }
+
+    return {
+        "classification":
+            clean(data.get("classification"), 80),
+        "summary":
+            clean(data.get("summary"), 500),
+        "next_action":
+            clean(data.get("next_action"), 500)
+    }
+
+
+# =========================================================
+# PUBLIC LEAD FINDER
+# =========================================================
+
+def find_public_businesses(
+    city,
+    category,
+    country=""
+):
+
+    safe_city = city.replace('"', '\\"')
+
+    query = f"""
+[out:json][timeout:30];
+
+area["name"="{safe_city}"]["boundary"="administrative"]->.searchArea;
+
+(
+    nwr["name"]["shop"](area.searchArea);
+    nwr["name"]["amenity"](area.searchArea);
+    nwr["name"]["office"](area.searchArea);
+);
+
+out center tags;
+"""
+
+    endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter"
+    ]
+
+    last_error = ""
+
+    for endpoint in endpoints:
+
+        try:
+
+            response = requests.post(
+                endpoint,
+                data=query,
+                timeout=40,
+                headers={
+                    "User-Agent":
+                        "NEXUS-AI-Client-Hunter"
+                }
+            )
+
+            if response.status_code != 200:
+
+                last_error = (
+                    f"Overpass HTTP "
+                    f"{response.status_code}"
+                )
+
+                continue
+
+            data = response.json()
+
+            results = []
+
+            wanted = category.lower().strip()
+
+            for element in data.get(
+                "elements",
+                []
+            ):
+
+                tags = element.get(
+                    "tags",
+                    {}
+                )
+
+                name = tags.get("name")
+
+                if not name:
+                    continue
+
+                searchable = " ".join([
+                    str(name),
+                    str(tags.get("shop", "")),
+                    str(tags.get("amenity", "")),
+                    str(tags.get("office", "")),
+                    str(tags.get("description", ""))
+                ]).lower()
+
+                if wanted:
+
+                    words = [
+                        w for w in wanted.split()
+                        if len(w) >= 4
+                    ]
+
+                    match = (
+                        wanted in searchable
+                        or any(
+                            w in searchable
+                            for w in words
+                        )
+                    )
+
+                    if not match:
+                        continue
+
+                website = (
+                    tags.get("website")
+                    or tags.get("contact:website")
+                    or ""
+                )
+
+                phone = (
+                    tags.get("phone")
+                    or tags.get("contact:phone")
+                    or ""
+                )
+
+                email = (
+                    tags.get("email")
+                    or tags.get("contact:email")
+                    or ""
+                )
+
+                if phone:
+                    contact = phone
+                elif email:
+                    contact = email
+                elif website:
+                    contact = website
+                else:
+                    contact = ""
+
+                results.append({
+                    "business_name":
+                        clean(name, 200),
+                    "person_name":
+                        "",
+                    "country":
+                        country,
+                    "city":
+                        city,
+                    "category":
+                        category,
+                    "website":
+                        clean(website, 500),
+                    "source_url":
+                        "https://www.openstreetmap.org/",
+                    "contact_method":
+                        clean(contact, 500)
+                })
+
+                if len(results) >= 50:
+                    break
+
+            return results, None
+
+        except Exception as e:
+
+            last_error = str(e)
+
+    return [], last_error or "Lead source unavailable."
+
+
+# =========================================================
+# DATABASE OPERATIONS
+# =========================================================
+
+def save_lead(lead):
+
+    conn = get_db()
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO leads (
+            business_name,
+            person_name,
+            country,
+            city,
+            category,
+            website,
+            source_url,
+            contact_method,
+            detected_problem,
+            recommended_service,
+            lead_score,
+            ai_reason,
+            status,
+            created_at,
+            updated_at
+        )
+        VALUES (
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+        )
+    """, (
+        lead.get("business_name"),
+        lead.get("person_name"),
+        lead.get("country"),
+        lead.get("city"),
+        lead.get("category"),
+        lead.get("website"),
+        lead.get("source_url"),
+        lead.get("contact_method"),
+        lead.get("detected_problem"),
+        lead.get("recommended_service"),
+        lead.get("lead_score", 0),
+        lead.get("ai_reason"),
+        "QUALIFIED",
+        now(),
+        now()
+    ))
+
+    lead_id = cursor.lastrowid
+
+    conn.commit()
+    conn.close()
+
+    return lead_id
+
+
+def get_leads():
+
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT *
+        FROM leads
+        ORDER BY lead_score DESC, id DESC
+    """).fetchall()
+
+    conn.close()
+
+    return rows
+
+
+def update_status(lead_id, status):
+
+    conn = get_db()
+
+    conn.execute("""
+        UPDATE leads
+        SET status = ?, updated_at = ?
+        WHERE id = ?
+    """, (
+        status,
+        now(),
+        lead_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def save_message(
+    lead_id,
+    channel,
+    message,
+    status="DRAFT"
+):
+
+    conn = get_db()
+
+    conn.execute("""
+        INSERT INTO messages (
+            lead_id,
+            channel,
+            message,
+            status,
+            created_at
+        )
+        VALUES (?,?,?,?,?)
+    """, (
+        lead_id,
+        channel,
+        message,
+        status,
+        now()
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def save_reply(
+    lead_id,
+    reply,
+    analysis
+):
+
+    conn = get_db()
+
+    conn.execute("""
+        INSERT INTO replies (
+            lead_id,
+            reply,
+            classification,
+            summary,
+            next_action,
+            created_at
+        )
+        VALUES (?,?,?,?,?,?)
+    """, (
+        lead_id,
+        reply,
+        analysis["classification"],
+        analysis["summary"],
+        analysis["next_action"],
+        now()
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def get_stats():
+
+    conn = get_db()
+
+    total = conn.execute(
+        "SELECT COUNT(*) FROM leads"
+    ).fetchone()[0]
+
+    qualified = conn.execute(
+        "SELECT COUNT(*) FROM leads "
         
