@@ -1,135 +1,60 @@
-
-import streamlit as st
-import requests
-import sqlite3
 import json
 import re
+import sqlite3
 from datetime import datetime
 from urllib.parse import urlparse
 
-# =========================================================
-# NEXUS AI — CLIENT HUNTER
-# SINGLE FILE APP
-# =========================================================
+import requests
+import streamlit as st
 
 st.set_page_config(
-    page_title="NEXUS AI — Client Hunter",
+    page_title="NEXUS AI Client Hunter",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
-DB_FILE = "nexus_client_hunter.db"
+DB = "client_hunter.db"
+
+STATUSES = [
+    "NEW",
+    "QUALIFIED",
+    "CONTACTED",
+    "REPLIED",
+    "INTERESTED",
+    "CALL REQUESTED",
+    "NEGOTIATING",
+    "DEAL",
+    "NOT INTERESTED",
+    "DO NOT CONTACT",
+]
 
 
-# =========================================================
-# PREMIUM UI
-# =========================================================
-
-st.markdown("""
-<style>
-.stApp {
-    background:
-        radial-gradient(circle at top right, #172033 0%, #080b12 35%),
-        #080b12;
-    color: #f4f7fb;
-}
-
-section[data-testid="stSidebar"] {
-    background: #0b1018;
-    border-right: 1px solid #202b3c;
-}
-
-.block-container {
-    max-width: 1450px;
-    padding-top: 1.5rem;
-}
-
-.nexus-title {
-    font-size: 38px;
-    font-weight: 900;
-    letter-spacing: -1.5px;
-}
-
-.nexus-sub {
-    color: #8e9caf;
-    font-size: 15px;
-}
-
-.card {
-    background: linear-gradient(145deg, #121925, #0c1119);
-    border: 1px solid #222d3f;
-    border-radius: 18px;
-    padding: 20px;
-    margin-bottom: 16px;
-}
-
-.metric {
-    background: #101722;
-    border: 1px solid #222d3f;
-    border-radius: 16px;
-    padding: 18px;
-    min-height: 105px;
-}
-
-.metric-number {
-    font-size: 30px;
-    font-weight: 900;
-}
-
-.metric-label {
-    color: #8c98aa;
-    font-size: 13px;
-}
-
-.hot {
-    background: #241b0d;
-    border: 1px solid #69511c;
-    border-radius: 18px;
-    padding: 20px;
-}
-
-.green {
-    color: #63e6a5;
-    font-weight: 800;
-}
-
-.yellow {
-    color: #ffd166;
-    font-weight: 800;
-}
-
-.red {
-    color: #ff7777;
-    font-weight: 800;
-}
-
-.muted {
-    color: #8995a8;
-    font-size: 12px;
-}
-</style>
-""", unsafe_allow_html=True)
+def now():
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
 
-# =========================================================
-# DATABASE
-# =========================================================
+def clean(value, max_len=1000):
+    if value is None:
+        return ""
+    return str(value).strip()[:max_len]
 
-def get_db():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+
+def valid_url(value):
+    try:
+        parsed = urlparse(value)
+        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    except Exception:
+        return False
 
 
 def init_db():
-    conn = get_db()
-    cur = conn.cursor()
+    conn = sqlite3.connect(DB, check_same_thread=False)
 
-    cur.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS leads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            business_name TEXT,
+            business_name TEXT NOT NULL,
             person_name TEXT,
             country TEXT,
             city TEXT,
@@ -145,20 +70,24 @@ def init_db():
             created_at TEXT,
             updated_at TEXT
         )
-    """)
+        """
+    )
 
-    cur.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lead_id INTEGER,
             channel TEXT,
             message TEXT,
-            status TEXT DEFAULT 'DRAFT',
+            status TEXT,
             created_at TEXT
         )
-    """)
+        """
+    )
 
-    cur.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS replies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lead_id INTEGER,
@@ -168,82 +97,39 @@ def init_db():
             next_action TEXT,
             created_at TEXT
         )
-    """)
+        """
+    )
 
     conn.commit()
-    conn.close()
+    return conn
 
 
-init_db()
+conn = init_db()
 
 
-# =========================================================
-# BASIC HELPERS
-# =========================================================
-
-def now():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def clean(value, limit=1000):
-    if value is None:
-        return ""
-    return str(value).strip()[:limit]
-
-
-def clean_url(url):
-    if not url:
-        return ""
-
-    url = url.strip()
-
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
-    return url
-
-
-def valid_url(url):
-    try:
-        parsed = urlparse(clean_url(url))
-        return (
-            parsed.scheme in ("http", "https")
-            and bool(parsed.netloc)
-        )
-    except Exception:
-        return False
-
-
-def score_class(score):
-    if score >= 75:
-        return "green"
-    if score >= 50:
-        return "yellow"
-    return "red"
-
-
-def get_gemini_key():
+def get_key():
     try:
         return st.secrets.get("GEMINI_API_KEY", "")
     except Exception:
         return ""
 
 
-# =========================================================
-# GEMINI AI
-# =========================================================
+def get_model():
+    try:
+        return st.secrets.get("GEMINI_MODEL", "gemini-2.5-flash")
+    except Exception:
+        return "gemini-2.5-flash"
+
 
 def gemini(prompt):
-    key = get_gemini_key()
+    key = get_key()
 
     if not key:
-        return None, "GEMINI_API_KEY is not configured."
-
-    model = "gemini-3.7-flash"
+        return ""
 
     url = (
-        "https://generativelanguage.googleapis.com/v1beta/"
-        f"models/{model}:generateContent"
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{get_model()}:generateContent?key={key}"
     )
 
     payload = {
@@ -257,355 +143,276 @@ def gemini(prompt):
             }
         ],
         "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 1400
-        }
+            "temperature": 0.4,
+            "maxOutputTokens": 1200,
+        },
     }
 
     try:
         response = requests.post(
             url,
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": key
-            },
             json=payload,
-            timeout=40
+            timeout=30,
         )
 
-        if response.status_code != 200:
-            return None, f"Gemini API error: {response.status_code}"
+        response.raise_for_status()
 
         data = response.json()
 
-        text = (
-            data
-            .get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text", "")
-        )
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-        if not text:
-            return None, "Gemini returned an empty response."
-
-        return text.strip(), None
-
-    except Exception as e:
-        return None, f"AI connection error: {e}"
+    except Exception as exc:
+        st.session_state["last_ai_error"] = str(exc)
+        return ""
 
 
 def gemini_json(prompt):
+    text = gemini(prompt)
 
-    text, error = gemini(
-        prompt + """
+    if not text:
+        return {}
 
-IMPORTANT:
-Return ONLY valid JSON.
-Do not use markdown.
-Do not use ```json.
-Do not add explanations outside JSON.
-"""
+    text = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        text.strip(),
+        flags=re.I,
     )
 
-    if error:
-        return None, error
+    text = re.sub(
+        r"\s*```$",
+        "",
+        text.strip(),
+    )
 
     try:
-        text = text.strip()
-
-        text = re.sub(
-            r"^```json\s*",
-            "",
-            text,
-            flags=re.I
-        )
-
-        text = re.sub(
-            r"^```\s*",
-            "",
-            text
-        )
-
-        text = re.sub(
-            r"\s*```$",
-            "",
-            text
-        )
-
-        return json.loads(text), None
-
+        return json.loads(text)
     except Exception:
-        return None, "AI returned invalid JSON."
+        match = re.search(r"\{.*\}", text, flags=re.S)
 
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except Exception:
+                pass
 
-# =========================================================
-# WEBSITE AUDIT
-# =========================================================
+    return {}
+
 
 def audit_website(url):
-
     if not valid_url(url):
-        return {
-            "reachable": False,
-            "status": None,
-            "title": "",
-            "description": "",
-            "problems": [
-                "No valid public website URL."
-            ]
-        }
-
-    url = clean_url(url)
+        return "No valid public website provided."
 
     try:
-
         response = requests.get(
             url,
             timeout=12,
-            allow_redirects=True,
             headers={
-                "User-Agent":
-                    "Mozilla/5.0 NEXUS-AI-Client-Hunter"
-            }
+                "User-Agent": "Mozilla/5.0 ClientHunter/1.0"
+            },
+            allow_redirects=True,
         )
 
-        html = response.text[:500000]
+        html = response.text[:300000]
 
-        title_match = re.search(
-            r"<title[^>]*>(.*?)</title>",
+        text = re.sub(
+            r"<[^>]+>",
+            " ",
             html,
-            re.I | re.S
         )
 
-        description_match = re.search(
-            r'<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']',
-            html,
-            re.I | re.S
-        )
-
-        title = ""
-
-        if title_match:
-            title = re.sub(
-                r"\s+",
-                " ",
-                title_match.group(1)
-            ).strip()
-
-        description = ""
-
-        if description_match:
-            description = re.sub(
-                r"\s+",
-                " ",
-                description_match.group(1)
-            ).strip()
-
-        lower = html.lower()
+        text = re.sub(
+            r"\s+",
+            " ",
+            text,
+        ).strip()
 
         problems = []
 
-        if len(title) < 5:
+        if response.status_code >= 400:
             problems.append(
-                "Website title appears missing or weak."
+                f"website returned HTTP {response.status_code}"
             )
 
-        if not description:
+        if len(text) < 300:
             problems.append(
-                "Meta description was not detected."
+                "very little readable public content detected"
             )
 
-        if "viewport" not in lower:
+        if "viewport" not in html.lower():
             problems.append(
-                "Mobile viewport tag was not detected."
+                "mobile viewport meta tag was not detected"
             )
 
         if not re.search(
-            r"(contact|book|quote|call|appointment|get started|schedule)",
-            lower
+            r"contact|book|quote|call|appointment|demo",
+            text,
+            re.I,
         ):
             problems.append(
-                "Clear contact/CTA signal was not detected."
+                "clear contact/conversion wording was not detected"
             )
 
         if not problems:
-            problems.append(
-                "No obvious basic issue detected."
+            return (
+                "No obvious issue detected by the basic public audit."
             )
 
-        return {
-            "reachable": True,
-            "status": response.status_code,
-            "title": title,
-            "description": description,
-            "problems": problems
-        }
+        return "; ".join(problems[:4])
 
-    except Exception as e:
-
-        return {
-            "reachable": False,
-            "status": None,
-            "title": "",
-            "description": "",
-            "problems": [
-                f"Website audit failed: {e}"
-            ]
-        }
+    except Exception as exc:
+        return f"Audit unavailable: {str(exc)[:160]}"
 
 
-# =========================================================
-# AI LEAD QUALIFICATION
-# =========================================================
-
-def qualify_lead(lead):
-
+def qualify_lead(
+    business,
+    category,
+    city,
+    website,
+    audit,
+):
     prompt = f"""
-You are an expert B2B sales qualification AI.
+You are a B2B lead qualification assistant.
 
-Business:
-{lead.get("business_name", "")}
+Return ONLY valid JSON with these keys:
 
-Category:
-{lead.get("category", "")}
+lead_score
+detected_problem
+recommended_service
+ai_reason
 
-Country:
-{lead.get("country", "")}
+Score must be 0-100.
 
-City:
-{lead.get("city", "")}
+Be conservative.
+Never invent facts.
 
-Website:
-{lead.get("website", "")}
+Business: {business}
+Category: {category}
+City: {city}
+Website: {website or "none"}
 
-Website audit:
-{json.dumps(lead.get("audit", {}))}
+Public audit:
+{audit}
 
-Evaluate whether this business could reasonably need:
-
-1. Website creation
-2. Website redesign
-3. AI automation
-4. Lead generation
-5. Business automation
-
-Never invent information.
-
-Return exactly:
-
-{{
-    "score": 0,
-    "problem": "short factual opportunity",
-    "service": "best recommended service",
-    "reason": "short explanation"
-}}
+Possible services:
+- website redesign
+- landing page
+- booking system
+- CRM automation
+- AI chatbot
+- lead follow-up automation
 """
 
-    data, error = gemini_json(prompt)
+    data = gemini_json(prompt)
 
-    if error or not data:
+    if data:
+        try:
+            score = int(data.get("lead_score", 0))
+            score = max(0, min(100, score))
+        except Exception:
+            score = 0
 
         return {
-            "score": 50,
-            "problem":
-                "Potential website or automation opportunity.",
-            "service":
-                "Website + AI automation",
-            "reason":
-                "AI qualification unavailable; manual review recommended."
+            "lead_score": score,
+            "detected_problem": clean(
+                data.get("detected_problem", ""),
+                500,
+            ),
+            "recommended_service": clean(
+                data.get("recommended_service", ""),
+                300,
+            ),
+            "ai_reason": clean(
+                data.get("ai_reason", ""),
+                700,
+            ),
         }
 
-    try:
-        score = int(data.get("score", 50))
-    except Exception:
-        score = 50
+    score = 40 if website else 55
 
-    score = max(0, min(100, score))
+    problem = (
+        audit
+        if audit
+        else "No public website supplied; website/automation opportunity may exist."
+    )
+
+    service = (
+        "Website + lead capture automation"
+        if not website
+        else "Website conversion improvement"
+    )
 
     return {
-        "score": score,
-        "problem":
-            clean(data.get("problem"), 500),
-        "service":
-            clean(data.get("service"), 250),
-        "reason":
-            clean(data.get("reason"), 600)
+        "lead_score": score,
+        "detected_problem": problem,
+        "recommended_service": service,
+        "ai_reason": (
+            "Fallback qualification used because AI analysis is unavailable."
+        ),
     }
 
 
-# =========================================================
-# AI OUTREACH
-# =========================================================
-
-def create_message(lead, channel):
-
+def create_message(lead, channel="Email"):
     prompt = f"""
-Create a concise, natural B2B outreach message.
+Write one short, natural B2B outreach message.
+
+Do not lie.
+Do not claim you already spoke to them.
+Do not guarantee results.
+
+Mention one specific opportunity from the supplied data.
+
+Keep it under 90 words.
+
+End with a low-pressure question about a quick idea or demo.
 
 Business:
-{lead.get("business_name")}
+{lead["business_name"]}
 
 Category:
-{lead.get("category")}
+{lead["category"]}
 
 City:
-{lead.get("city")}
+{lead["city"]}
 
 Website:
-{lead.get("website")}
+{lead["website"]}
 
-Detected opportunity:
-{lead.get("detected_problem")}
+Problem:
+{lead["detected_problem"]}
 
 Recommended service:
-{lead.get("recommended_service")}
+{lead["recommended_service"]}
 
 Channel:
 {channel}
-
-Rules:
-- Maximum 100 words.
-- Human and professional.
-- Personalize using only supplied information.
-- Mention one real opportunity.
-- No fake claims.
-- No guaranteed results.
-- No fake urgency.
-- No spam language.
-- Offer a quick idea/demo.
 """
 
-    text, error = gemini(prompt)
+    result = gemini(prompt)
 
-    if error:
+    if result:
+        return result
 
-        return (
-            f"Hi, I came across "
-            f"{lead.get('business_name', 'your business')} "
-            f"and noticed a possible opportunity around "
-            f"{lead.get('detected_problem', 'your website')}. "
-            f"I help businesses with "
-            f"{lead.get('recommended_service', 'websites and automation')}. "
-            f"I'd be happy to share a quick idea if you're interested."
-        )
+    return (
+        f"Hi, I came across {lead['business_name']} and noticed "
+        f"a possible opportunity around "
+        f"{lead['recommended_service'].lower() or 'lead capture'}. "
+        "I have a quick idea that may help improve enquiries. "
+        "Would you like me to send it over?"
+    )
 
-    return text
-
-
-# =========================================================
-# AI REPLY ANALYSIS
-# =========================================================
 
 def analyze_reply(reply):
-
     prompt = f"""
-Analyze this business reply.
+Classify this B2B reply.
 
-Reply:
-{reply}
+Return ONLY valid JSON with:
 
-Choose ONE classification:
+classification
+summary
+next_action
+
+Allowed classification values:
 
 INTERESTED
 WANTS PRICE
@@ -616,207 +423,182 @@ NOT INTERESTED
 SPAM
 UNKNOWN
 
-Return:
-
-{{
-    "classification": "ONE OF THE ABOVE",
-    "summary": "short summary",
-    "next_action": "short recommended next step"
-}}
+Reply:
+{reply}
 """
 
-    data, error = gemini_json(prompt)
+    data = gemini_json(prompt)
 
-    if error or not data:
-
+    if data:
         return {
-            "classification": "UNKNOWN",
-            "summary": "AI analysis unavailable.",
-            "next_action": "Review the reply manually."
+            "classification": clean(
+                data.get("classification", "UNKNOWN"),
+                80,
+            ).upper(),
+            "summary": clean(
+                data.get("summary", ""),
+                500,
+            ),
+            "next_action": clean(
+                data.get("next_action", ""),
+                500,
+            ),
         }
 
+    low = reply.lower()
+
+    if any(
+        x in low
+        for x in ["price", "cost", "how much"]
+    ):
+        classification = "WANTS PRICE"
+
+    elif any(
+        x in low
+        for x in ["call", "phone", "meeting"]
+    ):
+        classification = "WANTS A CALL"
+
+    elif any(
+        x in low
+        for x in ["yes", "interested", "sure", "tell me more"]
+    ):
+        classification = "INTERESTED"
+
+    elif any(
+        x in low
+        for x in ["no thanks", "not interested", "remove me"]
+    ):
+        classification = "NOT INTERESTED"
+
+    else:
+        classification = "UNKNOWN"
+
     return {
-        "classification":
-            clean(data.get("classification"), 80),
-        "summary":
-            clean(data.get("summary"), 500),
-        "next_action":
-            clean(data.get("next_action"), 500)
+        "classification": classification,
+        "summary": "Rule-based analysis used.",
+        "next_action": "Review reply manually.",
     }
 
 
-# =========================================================
-# PUBLIC LEAD FINDER
-# =========================================================
-
 def find_public_businesses(
     city,
+    country,
     category,
-    country=""
+    limit=20,
 ):
-
-    safe_city = city.replace('"', '\\"')
-
     query = f"""
-[out:json][timeout:30];
+[out:json][timeout:25];
 
-area["name"="{safe_city}"]["boundary"="administrative"]->.searchArea;
+area["name"="{city}"][boundary=administrative]->.a;
 
 (
-    nwr["name"]["shop"](area.searchArea);
-    nwr["name"]["amenity"](area.searchArea);
-    nwr["name"]["office"](area.searchArea);
+    nwr["name"]["shop"](area.a);
+    nwr["name"]["amenity"](area.a);
+    nwr["name"]["office"](area.a);
 );
 
-out center tags;
+out center tags {max(1, min(limit, 50))};
 """
 
-    endpoints = [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter"
-    ]
+    try:
+        response = requests.post(
+            "https://overpass-api.de/api/interpreter",
+            data=query,
+            timeout=35,
+            headers={
+                "User-Agent": "NEXUS-AI-Client-Hunter/1.0"
+            },
+        )
 
-    last_error = ""
+        response.raise_for_status()
 
-    for endpoint in endpoints:
+        elements = response.json().get(
+            "elements",
+            [],
+        )
 
-        try:
+    except Exception as exc:
+        st.session_state["finder_error"] = str(exc)
+        return []
 
-            response = requests.post(
-                endpoint,
-                data=query,
-                timeout=40,
-                headers={
-                    "User-Agent":
-                        "NEXUS-AI-Client-Hunter"
-                }
-            )
+    wanted = category.lower().strip()
 
-            if response.status_code != 200:
+    results = []
 
-                last_error = (
-                    f"Overpass HTTP "
-                    f"{response.status_code}"
-                )
+    for element in elements:
+        tags = element.get("tags", {})
 
-                continue
+        name = clean(
+            tags.get("name", ""),
+            200,
+        )
 
-            data = response.json()
+        if not name:
+            continue
 
-            results = []
+        blob = " ".join(
+            str(value)
+            for value in tags.values()
+        ).lower()
 
-            wanted = category.lower().strip()
+        if (
+            wanted
+            and wanted not in blob
+            and wanted not in name.lower()
+        ):
+            continue
 
-            for element in data.get(
-                "elements",
-                []
-            ):
+        website = (
+            tags.get("website")
+            or tags.get("contact:website")
+            or ""
+        )
 
-                tags = element.get(
-                    "tags",
-                    {}
-                )
+        phone = (
+            tags.get("phone")
+            or tags.get("contact:phone")
+            or ""
+        )
 
-                name = tags.get("name")
+        email = (
+            tags.get("email")
+            or tags.get("contact:email")
+            or ""
+        )
 
-                if not name:
-                    continue
+        contact = (
+            phone
+            or email
+            or website
+            or "Public source page"
+        )
 
-                searchable = " ".join([
-                    str(name),
-                    str(tags.get("shop", "")),
-                    str(tags.get("amenity", "")),
-                    str(tags.get("office", "")),
-                    str(tags.get("description", ""))
-                ]).lower()
+        results.append(
+            {
+                "business_name": name,
+                "city": city,
+                "country": country,
+                "category": category,
+                "website": website,
+                "contact_method": contact,
+                "source_url": (
+                    "https://www.openstreetmap.org/"
+                ),
+            }
+        )
 
-                if wanted:
+        if len(results) >= limit:
+            break
 
-                    words = [
-                        w for w in wanted.split()
-                        if len(w) >= 4
-                    ]
-
-                    match = (
-                        wanted in searchable
-                        or any(
-                            w in searchable
-                            for w in words
-                        )
-                    )
-
-                    if not match:
-                        continue
-
-                website = (
-                    tags.get("website")
-                    or tags.get("contact:website")
-                    or ""
-                )
-
-                phone = (
-                    tags.get("phone")
-                    or tags.get("contact:phone")
-                    or ""
-                )
-
-                email = (
-                    tags.get("email")
-                    or tags.get("contact:email")
-                    or ""
-                )
-
-                if phone:
-                    contact = phone
-                elif email:
-                    contact = email
-                elif website:
-                    contact = website
-                else:
-                    contact = ""
-
-                results.append({
-                    "business_name":
-                        clean(name, 200),
-                    "person_name":
-                        "",
-                    "country":
-                        country,
-                    "city":
-                        city,
-                    "category":
-                        category,
-                    "website":
-                        clean(website, 500),
-                    "source_url":
-                        "https://www.openstreetmap.org/",
-                    "contact_method":
-                        clean(contact, 500)
-                })
-
-                if len(results) >= 50:
-                    break
-
-            return results, None
-
-        except Exception as e:
-
-            last_error = str(e)
-
-    return [], last_error or "Lead source unavailable."
+    return results
 
 
-# =========================================================
-# DATABASE OPERATIONS
-# =========================================================
+def save_lead(item):
+    created = now()
 
-def save_lead(lead):
-
-    conn = get_db()
-
-    cursor = conn.cursor()
-
-    cursor.execute("""
+    cursor = conn.execute(
+        """
         INSERT INTO leads (
             business_name,
             person_name,
@@ -834,78 +616,114 @@ def save_lead(lead):
             created_at,
             updated_at
         )
-        VALUES (
-            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
-        )
-    """, (
-        lead.get("business_name"),
-        lead.get("person_name"),
-        lead.get("country"),
-        lead.get("city"),
-        lead.get("category"),
-        lead.get("website"),
-        lead.get("source_url"),
-        lead.get("contact_method"),
-        lead.get("detected_problem"),
-        lead.get("recommended_service"),
-        lead.get("lead_score", 0),
-        lead.get("ai_reason"),
-        "QUALIFIED",
-        now(),
-        now()
-    ))
-
-    lead_id = cursor.lastrowid
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            item.get("business_name", ""),
+            item.get("person_name", ""),
+            item.get("country", ""),
+            item.get("city", ""),
+            item.get("category", ""),
+            item.get("website", ""),
+            item.get("source_url", ""),
+            item.get("contact_method", ""),
+            item.get("detected_problem", ""),
+            item.get("recommended_service", ""),
+            int(item.get("lead_score", 0)),
+            item.get("ai_reason", ""),
+            item.get("status", "NEW"),
+            created,
+            created,
+        ),
+    )
 
     conn.commit()
-    conn.close()
 
-    return lead_id
+    return cursor.lastrowid
 
 
-def get_leads():
+def get_leads(
+    status=None,
+    min_score=0,
+):
+    if status and status != "ALL":
+        return conn.execute(
+            """
+            SELECT *
+            FROM leads
+            WHERE status=?
+            AND lead_score>=?
+            ORDER BY lead_score DESC, id DESC
+            """,
+            (
+                status,
+                min_score,
+            ),
+        ).fetchall()
 
-    conn = get_db()
-
-    rows = conn.execute("""
+    return conn.execute(
+        """
         SELECT *
         FROM leads
+        WHERE lead_score>=?
         ORDER BY lead_score DESC, id DESC
-    """).fetchall()
-
-    conn.close()
-
-    return rows
+        """,
+        (min_score,),
+    ).fetchall()
 
 
-def update_status(lead_id, status):
+def lead_dict(row):
+    columns = [
+        "id",
+        "business_name",
+        "person_name",
+        "country",
+        "city",
+        "category",
+        "website",
+        "source_url",
+        "contact_method",
+        "detected_problem",
+        "recommended_service",
+        "lead_score",
+        "ai_reason",
+        "status",
+        "created_at",
+        "updated_at",
+    ]
 
-    conn = get_db()
+    return dict(zip(columns, row))
 
-    conn.execute("""
+
+def update_status(
+    lead_id,
+    status,
+):
+    conn.execute(
+        """
         UPDATE leads
-        SET status = ?, updated_at = ?
-        WHERE id = ?
-    """, (
-        status,
-        now(),
-        lead_id
-    ))
+        SET status=?,
+            updated_at=?
+        WHERE id=?
+        """,
+        (
+            status,
+            now(),
+            lead_id,
+        ),
+    )
 
     conn.commit()
-    conn.close()
 
 
 def save_message(
     lead_id,
     channel,
     message,
-    status="DRAFT"
+    status,
 ):
-
-    conn = get_db()
-
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO messages (
             lead_id,
             channel,
@@ -913,28 +731,27 @@ def save_message(
             status,
             created_at
         )
-        VALUES (?,?,?,?,?)
-    """, (
-        lead_id,
-        channel,
-        message,
-        status,
-        now()
-    ))
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            lead_id,
+            channel,
+            message,
+            status,
+            now(),
+        ),
+    )
 
     conn.commit()
-    conn.close()
 
 
 def save_reply(
     lead_id,
     reply,
-    analysis
+    analysis,
 ):
-
-    conn = get_db()
-
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO replies (
             lead_id,
             reply,
@@ -943,28 +760,253 @@ def save_reply(
             next_action,
             created_at
         )
-        VALUES (?,?,?,?,?,?)
-    """, (
-        lead_id,
-        reply,
-        analysis["classification"],
-        analysis["summary"],
-        analysis["next_action"],
-        now()
-    ))
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            lead_id,
+            reply,
+            analysis["classification"],
+            analysis["summary"],
+            analysis["next_action"],
+            now(),
+        ),
+    )
 
     conn.commit()
-    conn.close()
 
 
-def get_stats():
-
-    conn = get_db()
-
+def stats():
     total = conn.execute(
         "SELECT COUNT(*) FROM leads"
     ).fetchone()[0]
 
     qualified = conn.execute(
-        "SELECT COUNT(*) FROM leads "
-        
+        """
+        SELECT COUNT(*)
+        FROM leads
+        WHERE status IN (
+            'QUALIFIED',
+            'CONTACTED',
+            'REPLIED',
+            'INTERESTED',
+            'CALL REQUESTED',
+            'NEGOTIATING',
+            'DEAL'
+        )
+        """
+    ).fetchone()[0]
+
+    interested = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM leads
+        WHERE status IN (
+            'INTERESTED',
+            'CALL REQUESTED',
+            'NEGOTIATING',
+            'DEAL'
+        )
+        """
+    ).fetchone()[0]
+
+    deals = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM leads
+        WHERE status='DEAL'
+        """
+    ).fetchone()[0]
+
+    sent = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM messages
+        WHERE status='SENT'
+        """
+    ).fetchone()[0]
+
+    replies = conn.execute(
+        "SELECT COUNT(*) FROM replies"
+    ).fetchone()[0]
+
+    return (
+        total,
+        qualified,
+        interested,
+        deals,
+        sent,
+        replies,
+    )
+
+
+def apply_css():
+    st.markdown(
+        """
+        <style>
+
+        .stApp {
+            background: #080b12;
+        }
+
+        [data-testid="stSidebar"] {
+            background: #0d111a;
+        }
+
+        .hero {
+            padding: 20px 24px;
+            border: 1px solid #202838;
+            border-radius: 18px;
+            background:
+                linear-gradient(
+                    135deg,
+                    #111827,
+                    #0b1220
+                );
+            margin-bottom: 18px;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: 32px;
+        }
+
+        .muted {
+            color: #9aa5b5;
+        }
+
+        .card {
+            padding: 18px;
+            border: 1px solid #202838;
+            border-radius: 16px;
+            background: #0d121c;
+            margin-bottom: 12px;
+        }
+
+        .alert {
+            padding: 16px;
+            border: 1px solid #634b1d;
+            border-radius: 14px;
+            background: #19140a;
+        }
+
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+apply_css()
+
+
+with st.sidebar:
+    st.markdown("## ⚡ NEXUS AI")
+    st.caption("AI Client Hunter")
+
+    page = st.radio(
+        "Navigation",
+        [
+            "Dashboard",
+            "Lead Finder",
+            "Leads",
+            "Outreach",
+            "AI Inbox",
+            "Deal Alerts",
+            "Analytics",
+            "Settings",
+        ],
+    )
+
+    st.divider()
+
+    if st.button(
+        "⏸ PAUSE ALL AUTOMATIONS",
+        use_container_width=True,
+    ):
+        st.session_state["paused"] = True
+        st.warning(
+            "Automations paused for this session."
+        )
+
+    st.caption(
+        "Auto-send works only through authorized official APIs. "
+        "No CAPTCHA, login bypass, spam, or private-data scraping."
+    )
+
+
+st.markdown(
+    """
+    <div class="hero">
+        <h1>⚡ NEXUS AI Client Hunter</h1>
+        <div class="muted">
+            Find → Qualify → Personalize → Follow up → Deal Alert
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+if page == "Dashboard":
+
+    total, qualified, interested, deals, sent, replies = stats()
+
+    a, b, c, d, e, f = st.columns(6)
+
+    a.metric("New Leads", total)
+    b.metric("Qualified", qualified)
+    c.metric("Interested", interested)
+    d.metric("Deals", deals)
+    e.metric("Messages", sent)
+    f.metric("Replies", replies)
+
+    st.subheader("🔥 High-value leads")
+
+    rows = get_leads(min_score=70)[:10]
+
+    if not rows:
+        st.info(
+            "No high-score leads yet. Use Lead Finder."
+        )
+
+    for row in rows:
+        lead = lead_dict(row)
+
+        with st.container(border=True):
+
+            st.write(
+                f"**{lead['business_name']}** · "
+                f"Score **{lead['lead_score']}** · "
+                f"{lead['status']}"
+            )
+
+            st.caption(
+                f"{lead['category']} · "
+                f"{lead['city']} · "
+                f"{lead['recommended_service']}"
+            )
+
+            if lead["detected_problem"]:
+                st.write(
+                    lead["detected_problem"]
+                )
+
+
+elif page == "Lead Finder":
+
+    st.subheader("🔎 Public Lead Finder")
+
+    c1, c2, c3 = st.columns(3)
+
+    country = c1.text_input(
+        "Country",
+        "United States",
+    )
+
+    city = c2.text_input(
+        "City",
+        "New York",
+    )
+
+    category = c3.text_input(
+        "Business category",
+       
