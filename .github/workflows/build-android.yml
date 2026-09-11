@@ -1,59 +1,752 @@
-name: Build Lakh Lead Automaton v2
+package com.lakh.leadautomaton
 
-on:
+import android.app.Activity
+import android.os.Bundle
+import android.graphics.Color
+import android.content.Context
+import android.view.Gravity
+import android.widget.*
+import java.util.Locale
 
-  workflow_dispatch:
+data class Lead(
+    var name: String,
+    var business: String,
+    var location: String,
+    var contact: String,
+    var score: Int,
+    var status: String
+)
 
-  push:
+class MainActivity : Activity() {
 
-    branches: [ main ]
+    private lateinit var body: LinearLayout
+    private val leads = mutableListOf<Lead>()
+    private var automationRunning = false
 
-jobs:
+    private val prefs by lazy {
+        getSharedPreferences("lakh_lead_automaton", Context.MODE_PRIVATE)
+    }
 
-  build:
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        loadLeads()
+        dashboard()
+    }
 
-    runs-on: ubuntu-latest
+    private fun setupScreen(title: String) {
 
-    steps:
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setPadding(20, 20, 20, 20)
+        root.setBackgroundColor(Color.rgb(247, 247, 249))
 
-      - name: Checkout
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
 
-        uses: actions/checkout@v4
+        val titleView = TextView(this)
+        titleView.text = title
+        titleView.textSize = 24f
+        titleView.setTextColor(Color.BLACK)
+        titleView.setTypeface(null, 1)
 
-      - name: Extract Functional App
+        header.addView(
+            titleView,
+            LinearLayout.LayoutParams(0, 70, 1f)
+        )
 
-        run: |
+        val home = Button(this)
+        home.text = "⌂"
+        home.setOnClickListener {
+            dashboard()
+        }
 
-          unzip -o LakhLeadAutomaton-Functional-v2.zip
+        header.addView(
+            home,
+            LinearLayout.LayoutParams(70, 70)
+        )
 
-      - name: Setup Java 17
+        root.addView(header)
 
-        uses: actions/setup-java@v5
+        val scroll = ScrollView(this)
 
-        with:
+        body = LinearLayout(this)
+        body.orientation = LinearLayout.VERTICAL
 
-          distribution: temurin
+        scroll.addView(body)
 
-          java-version: '17'
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
 
-      - name: Setup Gradle
+        setContentView(root)
+    }
 
-        uses: gradle/actions/setup-gradle@v4
+    private fun text(value: String, size: Float = 16f): TextView {
+        return TextView(this).apply {
+            text = value
+            textSize = size
+            setTextColor(Color.DKGRAY)
+            setPadding(8, 10, 8, 10)
+        }
+    }
 
-        with:
+    private fun button(
+        title: String,
+        action: () -> Unit
+    ): Button {
+        return Button(this).apply {
+            this.text = title
+            textSize = 14f
+            setOnClickListener {
+                action()
+            }
+        }
+    }
 
-          gradle-version: '8.9'
+    private fun field(hint: String): EditText {
+        return EditText(this).apply {
+            this.hint = hint
+            setSingleLine(true)
+            setPadding(14, 8, 14, 8)
+        }
+    }
 
-      - name: Build APK
+    private fun dashboard() {
 
-        run: gradle assembleDebug --no-daemon
+        setupScreen("LAKH LEAD AUTOMATON")
 
-      - name: Upload APK
+        body.addView(
+            text(
+                "AI Client Hunting & Lead Management",
+                16f
+            )
+        )
 
-        uses: actions/upload-artifact@v4
+        val status = if (automationRunning) {
+            "● AUTOMATION RUNNING"
+        } else {
+            "● AUTOMATION PAUSED"
+        }
 
-        with:
+        body.addView(text(status, 17f))
 
-          name: Lakh-Lead-Automaton-v2
+        body.addView(
+            button(
+                if (automationRunning)
+                    "⏸ PAUSE AUTOMATION"
+                else
+                    "▶ START AUTOMATION"
+            ) {
+                automationRunning = !automationRunning
 
-          path: app/build/outputs/apk/debug/app-debug.apk
+                logActivity(
+                    if (automationRunning)
+                        "Automation started"
+                    else
+                        "Automation paused"
+                )
+
+                dashboard()
+            }
+        )
+
+        body.addView(
+            button("🔎 LEAD HUNTER") {
+                leadHunter()
+            }
+        )
+
+        body.addView(
+            button("🧠 LEAD QUALIFICATION") {
+                qualification()
+            }
+        )
+
+        body.addView(
+            button("✉ AI OUTREACH") {
+                outreach()
+            }
+        )
+
+        body.addView(
+            button("📥 AI INBOX") {
+                inbox()
+            }
+        )
+
+        body.addView(
+            button("🔥 HOT LEADS") {
+                hotLeads()
+            }
+        )
+
+        body.addView(
+            button("📅 FOLLOW-UPS") {
+                followUps()
+            }
+        )
+
+        body.addView(
+            button("📊 ANALYTICS") {
+                analytics()
+            }
+        )
+
+        body.addView(
+            button("📋 AGENT ACTIVITY LOG") {
+                activityLog()
+            }
+        )
+
+        body.addView(
+            button("⚙ SETTINGS") {
+                settings()
+            }
+        )
+    }
+
+    private fun leadHunter() {
+
+        setupScreen("🔎 Lead Hunter")
+
+        val business = field("Business type — e.g. Café")
+        val location = field("Location — e.g. California")
+        val target = field("Target client / business")
+        val contact = field("Website / Email / WhatsApp")
+
+        body.addView(business)
+        body.addView(location)
+        body.addView(target)
+        body.addView(contact)
+
+        body.addView(
+            button("＋ SAVE LEAD") {
+
+                val name =
+                    if (target.text.toString().trim().isEmpty())
+                        "New Lead"
+                    else
+                        target.text.toString().trim()
+
+                val lead = Lead(
+                    name = name,
+                    business = business.text.toString(),
+                    location = location.text.toString(),
+                    contact = contact.text.toString(),
+                    score = 50,
+                    status = "New"
+                )
+
+                leads.add(lead)
+                saveLeads()
+
+                logActivity("Lead saved: $name")
+
+                Toast.makeText(
+                    this,
+                    "Lead saved",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                leadHunter()
+            }
+        )
+
+        body.addView(
+            text(
+                "Saved Leads: ${leads.size}",
+                18f
+            )
+        )
+
+        for (i in leads.indices) {
+            val lead = leads[i]
+
+            body.addView(
+                text(
+                    "${lead.name}\n" +
+                    "${lead.business} • ${lead.location}\n" +
+                    "Score: ${lead.score}/100 • ${lead.status}\n" +
+                    "Contact: ${lead.contact}",
+                    14f
+                )
+            )
+
+            body.addView(
+                button("QUALIFY LEAD") {
+                    qualifyLead(i)
+                }
+            )
+
+            body.addView(
+                button("DELETE LEAD") {
+                    leads.removeAt(i)
+                    saveLeads()
+                    leadHunter()
+                }
+            )
+        }
+    }
+
+    private fun qualifyLead(index: Int) {
+
+        val lead = leads[index]
+
+        lead.score = (lead.score + 20).coerceAtMost(100)
+
+        lead.status =
+            if (lead.score >= 80)
+                "Qualified"
+            else
+                "Review"
+
+        saveLeads()
+
+        logActivity(
+            "Lead qualified: ${lead.name} — ${lead.score}/100"
+        )
+
+        Toast.makeText(
+            this,
+            "Score: ${lead.score}/100",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        leadHunter()
+    }
+
+    private fun qualification() {
+
+        setupScreen("🧠 Lead Qualification")
+
+        if (leads.isEmpty()) {
+            body.addView(
+                text("No leads yet. Add leads from Lead Hunter.")
+            )
+            return
+        }
+
+        for (lead in leads.sortedByDescending { it.score }) {
+
+            body.addView(
+                text(
+                    "${lead.name}\n" +
+                    "Score: ${lead.score}/100\n" +
+                    "Status: ${lead.status}",
+                    16f
+                )
+            )
+        }
+
+        body.addView(
+            button("⚡ AUTO QUALIFY ALL") {
+
+                for (lead in leads) {
+
+                    lead.score =
+                        (lead.score + 15).coerceAtMost(100)
+
+                    lead.status =
+                        if (lead.score >= 80)
+                            "Qualified"
+                        else
+                            "Review"
+                }
+
+                saveLeads()
+                logActivity("All leads auto-qualified")
+
+                qualification()
+            }
+        )
+    }
+
+    private fun outreach() {
+
+        setupScreen("✉ AI Outreach")
+
+        if (leads.isEmpty()) {
+            body.addView(
+                text("Add a lead first from Lead Hunter.")
+            )
+            return
+        }
+
+        for (lead in leads) {
+
+            val message =
+                "Hi ${lead.name}, I came across " +
+                "${lead.business} in ${lead.location}. " +
+                "I noticed an opportunity that may help " +
+                "with customer acquisition. Would you be " +
+                "open to a quick conversation?"
+
+            body.addView(
+                text(
+                    "LEAD: ${lead.name}",
+                    18f
+                )
+            )
+
+            body.addView(
+                text(
+                    message,
+                    14f
+                )
+            )
+
+            body.addView(
+                button("MARK AS CONTACTED") {
+
+                    lead.status = "Contacted"
+                    saveLeads()
+
+                    logActivity(
+                        "Outreach marked contacted: ${lead.name}"
+                    )
+
+                    Toast.makeText(
+                        this,
+                        "Marked contacted",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    outreach()
+                }
+            )
+        }
+    }
+
+    private fun inbox() {
+
+        setupScreen("📥 AI Inbox")
+
+        body.addView(
+            text(
+                "Paste a client reply and classify it.",
+                16f
+            )
+        )
+
+        val reply = field("Client reply")
+
+        body.addView(reply)
+
+        body.addView(
+            button("🧠 ANALYZE REPLY") {
+
+                val message =
+                    reply.text.toString()
+                        .lowercase(Locale.getDefault())
+
+                val result = when {
+
+                    listOf(
+                        "interested",
+                        "yes",
+                        "sure",
+                        "let's talk",
+                        "lets talk",
+                        "call me",
+                        "details",
+                        "price"
+                    ).any {
+                        message.contains(it)
+                    } -> "INTERESTED 🔥"
+
+                    listOf(
+                        "maybe",
+                        "later",
+                        "next week",
+                        "think about",
+                        "consider"
+                    ).any {
+                        message.contains(it)
+                    } -> "MAYBE"
+
+                    listOf(
+                        "not interested",
+                        "no thanks",
+                        "stop",
+                        "remove"
+                    ).any {
+                        message.contains(it)
+                    } -> "NOT INTERESTED"
+
+                    else -> "FOLLOW-UP"
+                }
+
+                body.addView(
+                    text(
+                        "RESULT: $result",
+                        20f
+                    )
+                )
+
+                logActivity(
+                    "Reply classified: $result"
+                )
+
+                if (result.startsWith("INTERESTED")) {
+
+                    Toast.makeText(
+                        this,
+                        "🔥 HOT LEAD DETECTED",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        )
+    }
+
+    private fun hotLeads() {
+
+        setupScreen("🔥 Hot Leads")
+
+        val hot = leads.filter {
+            it.score >= 80 ||
+            it.status == "Interested"
+        }
+
+        if (hot.isEmpty()) {
+
+            body.addView(
+                text("No HOT leads yet.")
+            )
+
+            return
+        }
+
+        for (lead in hot) {
+
+            body.addView(
+                text(
+                    "🔥 ${lead.name}\n" +
+                    "Score: ${lead.score}/100\n" +
+                    "Status: ${lead.status}\n" +
+                    "Contact: ${lead.contact}",
+                    16f
+                )
+            )
+        }
+    }
+
+    private fun followUps() {
+
+        setupScreen("📅 Follow-ups")
+
+        val pending = leads.filter {
+            it.status == "Contacted" ||
+            it.status == "Maybe"
+        }
+
+        if (pending.isEmpty()) {
+
+            body.addView(
+                text("No follow-ups pending.")
+            )
+
+            return
+        }
+
+        for (lead in pending) {
+
+            body.addView(
+                button("FOLLOW UP — ${lead.name}") {
+
+                    lead.status = "Follow-up Sent"
+
+                    saveLeads()
+
+                    logActivity(
+                        "Follow-up sent/drafted: ${lead.name}"
+                    )
+
+                    followUps()
+                }
+            )
+        }
+    }
+
+    private fun analytics() {
+
+        setupScreen("📊 Analytics")
+
+        val qualified =
+            leads.count { it.score >= 80 }
+
+        val contacted =
+            leads.count {
+                it.status == "Contacted" ||
+                it.status == "Follow-up Sent"
+            }
+
+        val hot =
+            leads.count {
+                it.score >= 80 ||
+                it.status == "Interested"
+            }
+
+        val percentage =
+            if (leads.isEmpty())
+                0
+            else
+                hot * 100 / leads.size
+
+        body.addView(
+            text("TOTAL LEADS: ${leads.size}", 18f)
+        )
+
+        body.addView(
+            text("QUALIFIED: $qualified", 18f)
+        )
+
+        body.addView(
+            text("CONTACTED: $contacted", 18f)
+        )
+
+        body.addView(
+            text("HOT LEADS: $hot", 18f)
+        )
+
+        body.addView(
+            text(
+                "HOT PIPELINE: $percentage%",
+                18f
+            )
+        )
+    }
+
+    private fun activityLog() {
+
+        setupScreen("📋 Agent Activity Log")
+
+        val activity =
+            prefs.getString(
+                "activity",
+                "System ready."
+            ) ?: "System ready."
+
+        body.addView(
+            text(
+                activity,
+                15f
+            )
+        )
+    }
+
+    private fun settings() {
+
+        setupScreen("⚙ Settings")
+
+        body.addView(
+            text(
+                "Lakh Lead Automaton\n\n" +
+                "Local lead management is enabled.\n" +
+                "API integrations can be connected later.",
+                16f
+            )
+        )
+
+        body.addView(
+            button("🗑 CLEAR ALL LEADS") {
+
+                leads.clear()
+                saveLeads()
+
+                logActivity(
+                    "All local leads cleared"
+                )
+
+                settings()
+            }
+        )
+
+        body.addView(
+            button("🧹 CLEAR ACTIVITY LOG") {
+
+                prefs.edit()
+                    .remove("activity")
+                    .apply()
+
+                settings()
+            }
+        )
+    }
+
+    private fun logActivity(message: String) {
+
+        val old =
+            prefs.getString(
+                "activity",
+                ""
+            ) ?: ""
+
+        val updated =
+            "✓ $message\n$old"
+
+        prefs.edit()
+            .putString(
+                "activity",
+                updated.take(8000)
+            )
+            .apply()
+    }
+
+    private fun saveLeads() {
+
+        val data =
+            leads.joinToString("|||") {
+
+                listOf(
+                    it.name,
+                    it.business,
+                    it.location,
+                    it.contact,
+                    it.score.toString(),
+                    it.status
+                ).joinToString("###")
+            }
+
+        prefs.edit()
+            .putString("leads", data)
+            .apply()
+    }
+
+    private fun loadLeads() {
+
+        val data =
+            prefs.getString(
+                "leads",
+                ""
+            ) ?: ""
+
+        if (data.isBlank()) return
+
+        data.split("|||").forEach {
+
+            val parts =
+                it.split("###")
+
+            if (parts.size == 6) {
+
+                leads.add(
+                    Lead(
+                        name = parts[0],
+                        business = parts[1],
+                        location = parts[2],
+                        contact = parts[3],
+                        score = parts[4].toIntOrNull() ?: 0,
+                        status = parts[5]
+                    )
+                )
+            }
+        }
+    }
+}
