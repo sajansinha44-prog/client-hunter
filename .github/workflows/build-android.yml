@@ -1,10 +1,9 @@
-name: Build Lakh Lead Automaton APK
+name: Build Lakh Lead Automaton v2
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
@@ -14,190 +13,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract Functional App
+        run: |
+          unzip -o LakhLeadAutomaton-Functional-v2.zip
+
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Create Android project
-        run: |
-          mkdir -p app/src/main/java/com/lakh/leadautomaton
-          mkdir -p app/src/main/res/values
-
-          cat > settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-
-          rootProject.name = "LakhLeadAutomaton"
-          include(":app")
-          EOF
-
-          cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.7.3' apply false
-              id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
-          }
-          EOF
-
-          cat > gradle.properties <<'EOF'
-          android.useAndroidX=true
-          kotlin.code.style=official
-          EOF
-
-          cat > app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-              id 'org.jetbrains.kotlin.android'
-          }
-
-          android {
-              namespace 'com.lakh.leadautomaton'
-              compileSdk 35
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-
-              defaultConfig {
-                  applicationId 'com.lakh.leadautomaton'
-                  minSdk 24
-                  targetSdk 35
-                  versionCode 1
-                  versionName '1.0'
-              }
-          }
-          EOF
-
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:theme="@style/AppTheme"
-                  android:label="Lakh Lead Automaton"
-                  android:allowBackup="true"
-                  android:supportsRtl="true">
-
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
-
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-
-          cat > app/src/main/res/values/styles.xml <<'EOF'
-          <resources>
-              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:fontFamily">sans</item>
-                  <item name="android:colorAccent">#111111</item>
-              </style>
-          </resources>
-          EOF
-
-          cat > app/src/main/java/com/lakh/leadautomaton/MainActivity.kt <<'EOF'
-          package com.lakh.leadautomaton
-
-          import android.app.Activity
-          import android.os.Bundle
-          import android.graphics.Color
-          import android.widget.*
-
-          class MainActivity : Activity() {
-
-              private lateinit var log: TextView
-
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-
-                  val root = LinearLayout(this)
-                  root.orientation = LinearLayout.VERTICAL
-                  root.setPadding(24,24,24,24)
-                  root.setBackgroundColor(Color.rgb(247,247,249))
-
-                  val title = TextView(this)
-                  title.text = "LAKH LEAD AUTOMATON"
-                  title.textSize = 25f
-                  title.setTextColor(Color.BLACK)
-                  title.setTypeface(null, 1)
-                  root.addView(title)
-
-                  val sub = TextView(this)
-                  sub.text = "AI Company • Manager + Specialized Agents"
-                  sub.textSize = 15f
-                  root.addView(sub)
-
-                  addButton(root, "▶ START AUTONOMOUS WORK",
-                      "AI Manager started • Agents working")
-
-                  addButton(root, "⏸ PAUSE AUTOMATION",
-                      "Automation paused")
-
-                  addButton(root, "🔎 LEAD HUNTER",
-                      "Lead Hunter and Qualification active")
-
-                  addButton(root, "✉ AI OUTREACH",
-                      "Personalized outreach ready")
-
-                  addButton(root, "☎ VOICE / CALLING",
-                      "Approved calling integration ready")
-
-                  addButton(root, "💬 MESSAGING",
-                      "Approved messaging API ready")
-
-                  addButton(root, "🔥 HOT LEADS",
-                      "Sales Agent monitoring interested clients")
-
-                  addButton(root, "📊 ANALYTICS",
-                      "Analytics Agent active")
-
-                  log = TextView(this)
-                  log.text = "AGENT ACTIVITY\nSystem ready..."
-                  log.textSize = 13f
-                  log.setPadding(0,20,0,0)
-                  root.addView(log)
-
-                  setContentView(root)
-              }
-
-              private fun addButton(
-                  parent: LinearLayout,
-                  text: String,
-                  message: String
-              ) {
-                  val b = Button(this)
-                  b.text = text
-                  b.setOnClickListener {
-                      log.text =
-                          "AGENT ACTIVITY\n✓ $message\n✓ AI Manager coordinating agents..."
-                  }
-                  parent.addView(b)
-              }
-          }
-          EOF
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -210,5 +34,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Lakh-Lead-Automaton
+          name: Lakh-Lead-Automaton-v2
           path: app/build/outputs/apk/debug/app-debug.apk
