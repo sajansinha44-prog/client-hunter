@@ -1,752 +1,254 @@
-package com.lakh.leadautomaton
-
-import android.app.Activity
-import android.os.Bundle
-import android.graphics.Color
-import android.content.Context
-import android.view.Gravity
-import android.widget.*
-import java.util.Locale
-
-data class Lead(
-    var name: String,
-    var business: String,
-    var location: String,
-    var contact: String,
-    var score: Int,
-    var status: String
-)
-
-class MainActivity : Activity() {
-
-    private lateinit var body: LinearLayout
-    private val leads = mutableListOf<Lead>()
-    private var automationRunning = false
-
-    private val prefs by lazy {
-        getSharedPreferences("lakh_lead_automaton", Context.MODE_PRIVATE)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        loadLeads()
-        dashboard()
-    }
-
-    private fun setupScreen(title: String) {
-
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.setPadding(20, 20, 20, 20)
-        root.setBackgroundColor(Color.rgb(247, 247, 249))
-
-        val header = LinearLayout(this)
-        header.orientation = LinearLayout.HORIZONTAL
-        header.gravity = Gravity.CENTER_VERTICAL
-
-        val titleView = TextView(this)
-        titleView.text = title
-        titleView.textSize = 24f
-        titleView.setTextColor(Color.BLACK)
-        titleView.setTypeface(null, 1)
-
-        header.addView(
-            titleView,
-            LinearLayout.LayoutParams(0, 70, 1f)
-        )
-
-        val home = Button(this)
-        home.text = "⌂"
-        home.setOnClickListener {
-            dashboard()
-        }
-
-        header.addView(
-            home,
-            LinearLayout.LayoutParams(70, 70)
-        )
-
-        root.addView(header)
-
-        val scroll = ScrollView(this)
-
-        body = LinearLayout(this)
-        body.orientation = LinearLayout.VERTICAL
-
-        scroll.addView(body)
-
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-
-        setContentView(root)
-    }
-
-    private fun text(value: String, size: Float = 16f): TextView {
-        return TextView(this).apply {
-            text = value
-            textSize = size
-            setTextColor(Color.DKGRAY)
-            setPadding(8, 10, 8, 10)
-        }
-    }
-
-    private fun button(
-        title: String,
-        action: () -> Unit
-    ): Button {
-        return Button(this).apply {
-            this.text = title
-            textSize = 14f
-            setOnClickListener {
-                action()
-            }
-        }
-    }
-
-    private fun field(hint: String): EditText {
-        return EditText(this).apply {
-            this.hint = hint
-            setSingleLine(true)
-            setPadding(14, 8, 14, 8)
-        }
-    }
-
-    private fun dashboard() {
-
-        setupScreen("LAKH LEAD AUTOMATON")
-
-        body.addView(
-            text(
-                "AI Client Hunting & Lead Management",
-                16f
-            )
-        )
-
-        val status = if (automationRunning) {
-            "● AUTOMATION RUNNING"
-        } else {
-            "● AUTOMATION PAUSED"
-        }
-
-        body.addView(text(status, 17f))
-
-        body.addView(
-            button(
-                if (automationRunning)
-                    "⏸ PAUSE AUTOMATION"
-                else
-                    "▶ START AUTOMATION"
-            ) {
-                automationRunning = !automationRunning
-
-                logActivity(
-                    if (automationRunning)
-                        "Automation started"
-                    else
-                        "Automation paused"
-                )
-
-                dashboard()
-            }
-        )
-
-        body.addView(
-            button("🔎 LEAD HUNTER") {
-                leadHunter()
-            }
-        )
-
-        body.addView(
-            button("🧠 LEAD QUALIFICATION") {
-                qualification()
-            }
-        )
-
-        body.addView(
-            button("✉ AI OUTREACH") {
-                outreach()
-            }
-        )
-
-        body.addView(
-            button("📥 AI INBOX") {
-                inbox()
-            }
-        )
-
-        body.addView(
-            button("🔥 HOT LEADS") {
-                hotLeads()
-            }
-        )
-
-        body.addView(
-            button("📅 FOLLOW-UPS") {
-                followUps()
-            }
-        )
-
-        body.addView(
-            button("📊 ANALYTICS") {
-                analytics()
-            }
-        )
-
-        body.addView(
-            button("📋 AGENT ACTIVITY LOG") {
-                activityLog()
-            }
-        )
-
-        body.addView(
-            button("⚙ SETTINGS") {
-                settings()
-            }
-        )
-    }
-
-    private fun leadHunter() {
-
-        setupScreen("🔎 Lead Hunter")
-
-        val business = field("Business type — e.g. Café")
-        val location = field("Location — e.g. California")
-        val target = field("Target client / business")
-        val contact = field("Website / Email / WhatsApp")
-
-        body.addView(business)
-        body.addView(location)
-        body.addView(target)
-        body.addView(contact)
-
-        body.addView(
-            button("＋ SAVE LEAD") {
-
-                val name =
-                    if (target.text.toString().trim().isEmpty())
-                        "New Lead"
-                    else
-                        target.text.toString().trim()
-
-                val lead = Lead(
-                    name = name,
-                    business = business.text.toString(),
-                    location = location.text.toString(),
-                    contact = contact.text.toString(),
-                    score = 50,
-                    status = "New"
-                )
-
-                leads.add(lead)
-                saveLeads()
-
-                logActivity("Lead saved: $name")
-
-                Toast.makeText(
-                    this,
-                    "Lead saved",
-                    Toast.LENGTH_SHORT
-                ).show()
-
-                leadHunter()
-            }
-        )
-
-        body.addView(
-            text(
-                "Saved Leads: ${leads.size}",
-                18f
-            )
-        )
-
-        for (i in leads.indices) {
-            val lead = leads[i]
-
-            body.addView(
-                text(
-                    "${lead.name}\n" +
-                    "${lead.business} • ${lead.location}\n" +
-                    "Score: ${lead.score}/100 • ${lead.status}\n" +
-                    "Contact: ${lead.contact}",
-                    14f
-                )
-            )
-
-            body.addView(
-                button("QUALIFY LEAD") {
-                    qualifyLead(i)
-                }
-            )
-
-            body.addView(
-                button("DELETE LEAD") {
-                    leads.removeAt(i)
-                    saveLeads()
-                    leadHunter()
-                }
-            )
-        }
-    }
-
-    private fun qualifyLead(index: Int) {
-
-        val lead = leads[index]
-
-        lead.score = (lead.score + 20).coerceAtMost(100)
-
-        lead.status =
-            if (lead.score >= 80)
-                "Qualified"
-            else
-                "Review"
-
-        saveLeads()
-
-        logActivity(
-            "Lead qualified: ${lead.name} — ${lead.score}/100"
-        )
-
-        Toast.makeText(
-            this,
-            "Score: ${lead.score}/100",
-            Toast.LENGTH_SHORT
-        ).show()
-
-        leadHunter()
-    }
-
-    private fun qualification() {
-
-        setupScreen("🧠 Lead Qualification")
-
-        if (leads.isEmpty()) {
-            body.addView(
-                text("No leads yet. Add leads from Lead Hunter.")
-            )
-            return
-        }
-
-        for (lead in leads.sortedByDescending { it.score }) {
-
-            body.addView(
-                text(
-                    "${lead.name}\n" +
-                    "Score: ${lead.score}/100\n" +
-                    "Status: ${lead.status}",
-                    16f
-                )
-            )
-        }
-
-        body.addView(
-            button("⚡ AUTO QUALIFY ALL") {
-
-                for (lead in leads) {
-
-                    lead.score =
-                        (lead.score + 15).coerceAtMost(100)
-
-                    lead.status =
-                        if (lead.score >= 80)
-                            "Qualified"
-                        else
-                            "Review"
-                }
-
-                saveLeads()
-                logActivity("All leads auto-qualified")
-
-                qualification()
-            }
-        )
-    }
-
-    private fun outreach() {
-
-        setupScreen("✉ AI Outreach")
-
-        if (leads.isEmpty()) {
-            body.addView(
-                text("Add a lead first from Lead Hunter.")
-            )
-            return
-        }
-
-        for (lead in leads) {
-
-            val message =
-                "Hi ${lead.name}, I came across " +
-                "${lead.business} in ${lead.location}. " +
-                "I noticed an opportunity that may help " +
-                "with customer acquisition. Would you be " +
-                "open to a quick conversation?"
-
-            body.addView(
-                text(
-                    "LEAD: ${lead.name}",
-                    18f
-                )
-            )
-
-            body.addView(
-                text(
-                    message,
-                    14f
-                )
-            )
-
-            body.addView(
-                button("MARK AS CONTACTED") {
-
-                    lead.status = "Contacted"
-                    saveLeads()
-
-                    logActivity(
-                        "Outreach marked contacted: ${lead.name}"
-                    )
-
-                    Toast.makeText(
-                        this,
-                        "Marked contacted",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                    outreach()
-                }
-            )
-        }
-    }
-
-    private fun inbox() {
-
-        setupScreen("📥 AI Inbox")
-
-        body.addView(
-            text(
-                "Paste a client reply and classify it.",
-                16f
-            )
-        )
-
-        val reply = field("Client reply")
-
-        body.addView(reply)
-
-        body.addView(
-            button("🧠 ANALYZE REPLY") {
-
-                val message =
-                    reply.text.toString()
-                        .lowercase(Locale.getDefault())
-
-                val result = when {
-
-                    listOf(
-                        "interested",
-                        "yes",
-                        "sure",
-                        "let's talk",
-                        "lets talk",
-                        "call me",
-                        "details",
-                        "price"
-                    ).any {
-                        message.contains(it)
-                    } -> "INTERESTED 🔥"
-
-                    listOf(
-                        "maybe",
-                        "later",
-                        "next week",
-                        "think about",
-                        "consider"
-                    ).any {
-                        message.contains(it)
-                    } -> "MAYBE"
-
-                    listOf(
-                        "not interested",
-                        "no thanks",
-                        "stop",
-                        "remove"
-                    ).any {
-                        message.contains(it)
-                    } -> "NOT INTERESTED"
-
-                    else -> "FOLLOW-UP"
-                }
-
-                body.addView(
-                    text(
-                        "RESULT: $result",
-                        20f
-                    )
-                )
-
-                logActivity(
-                    "Reply classified: $result"
-                )
-
-                if (result.startsWith("INTERESTED")) {
-
-                    Toast.makeText(
-                        this,
-                        "🔥 HOT LEAD DETECTED",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        )
-    }
-
-    private fun hotLeads() {
-
-        setupScreen("🔥 Hot Leads")
-
-        val hot = leads.filter {
-            it.score >= 80 ||
-            it.status == "Interested"
-        }
-
-        if (hot.isEmpty()) {
-
-            body.addView(
-                text("No HOT leads yet.")
-            )
-
-            return
-        }
-
-        for (lead in hot) {
-
-            body.addView(
-                text(
-                    "🔥 ${lead.name}\n" +
-                    "Score: ${lead.score}/100\n" +
-                    "Status: ${lead.status}\n" +
-                    "Contact: ${lead.contact}",
-                    16f
-                )
-            )
-        }
-    }
-
-    private fun followUps() {
-
-        setupScreen("📅 Follow-ups")
-
-        val pending = leads.filter {
-            it.status == "Contacted" ||
-            it.status == "Maybe"
-        }
-
-        if (pending.isEmpty()) {
-
-            body.addView(
-                text("No follow-ups pending.")
-            )
-
-            return
-        }
-
-        for (lead in pending) {
-
-            body.addView(
-                button("FOLLOW UP — ${lead.name}") {
-
-                    lead.status = "Follow-up Sent"
-
-                    saveLeads()
-
-                    logActivity(
-                        "Follow-up sent/drafted: ${lead.name}"
-                    )
-
-                    followUps()
-                }
-            )
-        }
-    }
-
-    private fun analytics() {
-
-        setupScreen("📊 Analytics")
-
-        val qualified =
-            leads.count { it.score >= 80 }
-
-        val contacted =
-            leads.count {
-                it.status == "Contacted" ||
-                it.status == "Follow-up Sent"
-            }
-
-        val hot =
-            leads.count {
-                it.score >= 80 ||
-                it.status == "Interested"
-            }
-
-        val percentage =
-            if (leads.isEmpty())
-                0
-            else
-                hot * 100 / leads.size
-
-        body.addView(
-            text("TOTAL LEADS: ${leads.size}", 18f)
-        )
-
-        body.addView(
-            text("QUALIFIED: $qualified", 18f)
-        )
-
-        body.addView(
-            text("CONTACTED: $contacted", 18f)
-        )
-
-        body.addView(
-            text("HOT LEADS: $hot", 18f)
-        )
-
-        body.addView(
-            text(
-                "HOT PIPELINE: $percentage%",
-                18f
-            )
-        )
-    }
-
-    private fun activityLog() {
-
-        setupScreen("📋 Agent Activity Log")
-
-        val activity =
-            prefs.getString(
-                "activity",
-                "System ready."
-            ) ?: "System ready."
-
-        body.addView(
-            text(
-                activity,
-                15f
-            )
-        )
-    }
-
-    private fun settings() {
-
-        setupScreen("⚙ Settings")
-
-        body.addView(
-            text(
-                "Lakh Lead Automaton\n\n" +
-                "Local lead management is enabled.\n" +
-                "API integrations can be connected later.",
-                16f
-            )
-        )
-
-        body.addView(
-            button("🗑 CLEAR ALL LEADS") {
-
-                leads.clear()
-                saveLeads()
-
-                logActivity(
-                    "All local leads cleared"
-                )
-
-                settings()
-            }
-        )
-
-        body.addView(
-            button("🧹 CLEAR ACTIVITY LOG") {
-
-                prefs.edit()
-                    .remove("activity")
-                    .apply()
-
-                settings()
-            }
-        )
-    }
-
-    private fun logActivity(message: String) {
-
-        val old =
-            prefs.getString(
-                "activity",
-                ""
-            ) ?: ""
-
-        val updated =
-            "✓ $message\n$old"
-
-        prefs.edit()
-            .putString(
-                "activity",
-                updated.take(8000)
-            )
-            .apply()
-    }
-
-    private fun saveLeads() {
-
-        val data =
-            leads.joinToString("|||") {
-
-                listOf(
-                    it.name,
-                    it.business,
-                    it.location,
-                    it.contact,
-                    it.score.toString(),
-                    it.status
-                ).joinToString("###")
-            }
-
-        prefs.edit()
-            .putString("leads", data)
-            .apply()
-    }
-
-    private fun loadLeads() {
-
-        val data =
-            prefs.getString(
-                "leads",
-                ""
-            ) ?: ""
-
-        if (data.isBlank()) return
-
-        data.split("|||").forEach {
-
-            val parts =
-                it.split("###")
-
-            if (parts.size == 6) {
-
-                leads.add(
-                    Lead(
-                        name = parts[0],
-                        business = parts[1],
-                        location = parts[2],
-                        contact = parts[3],
-                        score = parts[4].toIntOrNull() ?: 0,
-                        status = parts[5]
-                    )
-                )
-            }
-        }
-    }
-}
+name: Build Lakh Lead Automaton APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-android.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/lakh/leadautomaton
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "LakhLeadAutomaton"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+              id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+
+          android {
+              namespace 'com.lakh.leadautomaton'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.lakh.leadautomaton'
+                  minSdk 24
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:theme="@style/AppTheme"
+                  android:label="Lakh Lead Automaton"
+                  android:allowBackup="true"
+                  android:supportsRtl="true">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+
+                  </activity>
+
+              </application>
+
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
+
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:colorAccent">#111111</item>
+
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/lakh/leadautomaton/MainActivity.kt <<'EOF'
+          package com.lakh.leadautomaton
+
+          import android.app.Activity
+          import android.os.Bundle
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.view.Gravity
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.ScrollView
+
+          class MainActivity : Activity() {
+
+              private lateinit var activityLog: TextView
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  val scroll = ScrollView(this)
+
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setPadding(24, 28, 24, 28)
+                  root.setBackgroundColor(Color.rgb(12, 14, 18))
+
+                  val title = TextView(this)
+                  title.text = "LAKH LEAD AUTOMATON"
+                  title.textSize = 25f
+                  title.setTextColor(Color.WHITE)
+                  title.setTypeface(null, Typeface.BOLD)
+                  root.addView(title)
+
+                  val subtitle = TextView(this)
+                  subtitle.text = "AI Client Hunting • Lead Management"
+                  subtitle.textSize = 15f
+                  subtitle.setTextColor(Color.LTGRAY)
+                  subtitle.setPadding(0, 8, 0, 24)
+                  root.addView(subtitle)
+
+                  val status = TextView(this)
+                  status.text = "● AUTOMATION READY"
+                  status.textSize = 16f
+                  status.setTextColor(Color.rgb(80, 220, 130))
+                  status.setPadding(0, 0, 0, 20)
+                  root.addView(status)
+
+                  addButton(root, "▶ START AUTOMATION",
+                      "Automation started. Lead Hunter and Qualification agents are ready.")
+
+                  addButton(root, "⏸ PAUSE AUTOMATION",
+                      "Automation paused.")
+
+                  addButton(root, "🔎 LEAD HUNTER",
+                      "Lead Hunter: enter business type, location and target client.")
+
+                  addButton(root, "🎯 LEAD QUALIFICATION",
+                      "Qualification Agent: scoring leads and checking fit.")
+
+                  addButton(root, "✉ AI OUTREACH",
+                      "Outreach Agent: personalized outreach drafts ready.")
+
+                  addButton(root, "💬 AI INBOX",
+                      "Inbox Agent: reply classification enabled.")
+
+                  addButton(root, "🔥 HOT LEADS",
+                      "Sales Agent: monitoring Interested leads.")
+
+                  addButton(root, "🔔 FOLLOW-UPS",
+                      "Follow-up Agent: follow-up queue ready.")
+
+                  addButton(root, "📊 ANALYTICS",
+                      "Analytics Agent: pipeline statistics ready.")
+
+                  addButton(root, "⚙ SETTINGS",
+                      "Settings opened.")
+
+                  activityLog = TextView(this)
+                  activityLog.text = "AGENT ACTIVITY\\nSystem initialized."
+                  activityLog.textSize = 14f
+                  activityLog.setTextColor(Color.WHITE)
+                  activityLog.setPadding(0, 28, 0, 10)
+                  root.addView(activityLog)
+
+                  scroll.addView(root)
+                  setContentView(scroll)
+              }
+
+              private fun addButton(
+                  parent: LinearLayout,
+                  label: String,
+                  message: String
+              ) {
+                  val button = Button(this)
+                  button.text = label
+                  button.textSize = 14f
+                  button.setOnClickListener {
+                      activityLog.text =
+                          "AGENT ACTIVITY\\n✓ $message\\n✓ AI Manager coordinating agents."
+                  }
+
+                  parent.addView(
+                      button,
+                      LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.WRAP_CONTENT
+                      )
+                  )
+              }
+          }
+          EOF
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lakh-Lead-Automaton
+          path: app/build/outputs/apk/debug/app-debug.apk
