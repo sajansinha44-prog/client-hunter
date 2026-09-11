@@ -1,4 +1,4 @@
-name: Build Lakh Lead Automaton APK
+name: Build Lakh Lead Automaton
 
 on:
   workflow_dispatch:
@@ -14,15 +14,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Create Android project
+      - name: Create project
         shell: bash
         run: |
+          rm -rf app build.gradle settings.gradle gradle.properties
           mkdir -p app/src/main/java/com/lakh/leadautomaton
           mkdir -p app/src/main/res/values
 
@@ -50,19 +51,17 @@ jobs:
           cat > build.gradle <<'EOF'
           plugins {
               id 'com.android.application' version '8.7.3' apply false
-              id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
           }
           EOF
 
           cat > gradle.properties <<'EOF'
           android.useAndroidX=true
-          kotlin.code.style=official
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           EOF
 
           cat > app/build.gradle <<'EOF'
           plugins {
               id 'com.android.application'
-              id 'org.jetbrains.kotlin.android'
           }
 
           android {
@@ -81,15 +80,13 @@ jobs:
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
-
-              kotlinOptions {
-                  jvmTarget = '17'
-              }
           }
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET"/>
 
               <application
                   android:theme="@style/AppTheme"
@@ -116,125 +113,456 @@ jobs:
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <resources>
               <style name="AppTheme"
-                  parent="android:style/Theme.Material.Light.NoActionBar">
-
+                  parent="android:style/Theme.Material.NoActionBar">
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:windowLightStatusBar">true</item>
-                  <item name="android:colorAccent">#111111</item>
-
+                  <item name="android:colorAccent">#7C5CFF</item>
+                  <item name="android:navigationBarColor">#0B0D12</item>
+                  <item name="android:statusBarColor">#0B0D12</item>
+                  <item name="android:windowLightStatusBar">false</item>
               </style>
           </resources>
           EOF
 
-          cat > app/src/main/java/com/lakh/leadautomaton/MainActivity.kt <<'EOF'
-          package com.lakh.leadautomaton
+          cat > app/src/main/java/com/lakh/leadautomaton/MainActivity.java <<'EOF'
+          package com.lakh.leadautomaton;
 
-          import android.app.Activity
-          import android.os.Bundle
-          import android.graphics.Color
-          import android.graphics.Typeface
-          import android.view.Gravity
-          import android.widget.Button
-          import android.widget.LinearLayout
-          import android.widget.TextView
-          import android.widget.ScrollView
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.content.*;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.net.Uri;
+          import android.view.*;
+          import android.widget.*;
+          import org.json.*;
 
-          class MainActivity : Activity() {
+          import java.io.*;
+          import java.net.*;
+          import java.util.*;
 
-              private lateinit var activityLog: TextView
+          public class MainActivity extends Activity {
 
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
+              LinearLayout root;
+              TextView log;
+              SharedPreferences prefs;
+              ArrayList<JSONObject> leads = new ArrayList<>();
+              boolean paused = false;
 
-                  val scroll = ScrollView(this)
+              int BG = Color.rgb(10,12,17);
+              int CARD = Color.rgb(22,25,33);
+              int WHITE = Color.WHITE;
+              int MUTED = Color.rgb(170,175,190);
+              int PURPLE = Color.rgb(124,92,255);
+              int GREEN = Color.rgb(55,210,125);
+              int RED = Color.rgb(240,80,90);
 
-                  val root = LinearLayout(this)
-                  root.orientation = LinearLayout.VERTICAL
-                  root.setPadding(24, 28, 24, 28)
-                  root.setBackgroundColor(Color.rgb(12, 14, 18))
-
-                  val title = TextView(this)
-                  title.text = "LAKH LEAD AUTOMATON"
-                  title.textSize = 25f
-                  title.setTextColor(Color.WHITE)
-                  title.setTypeface(null, Typeface.BOLD)
-                  root.addView(title)
-
-                  val subtitle = TextView(this)
-                  subtitle.text = "AI Client Hunting • Lead Management"
-                  subtitle.textSize = 15f
-                  subtitle.setTextColor(Color.LTGRAY)
-                  subtitle.setPadding(0, 8, 0, 24)
-                  root.addView(subtitle)
-
-                  val status = TextView(this)
-                  status.text = "● AUTOMATION READY"
-                  status.textSize = 16f
-                  status.setTextColor(Color.rgb(80, 220, 130))
-                  status.setPadding(0, 0, 0, 20)
-                  root.addView(status)
-
-                  addButton(root, "▶ START AUTOMATION",
-                      "Automation started. Lead Hunter and Qualification agents are ready.")
-
-                  addButton(root, "⏸ PAUSE AUTOMATION",
-                      "Automation paused.")
-
-                  addButton(root, "🔎 LEAD HUNTER",
-                      "Lead Hunter: enter business type, location and target client.")
-
-                  addButton(root, "🎯 LEAD QUALIFICATION",
-                      "Qualification Agent: scoring leads and checking fit.")
-
-                  addButton(root, "✉ AI OUTREACH",
-                      "Outreach Agent: personalized outreach drafts ready.")
-
-                  addButton(root, "💬 AI INBOX",
-                      "Inbox Agent: reply classification enabled.")
-
-                  addButton(root, "🔥 HOT LEADS",
-                      "Sales Agent: monitoring Interested leads.")
-
-                  addButton(root, "🔔 FOLLOW-UPS",
-                      "Follow-up Agent: follow-up queue ready.")
-
-                  addButton(root, "📊 ANALYTICS",
-                      "Analytics Agent: pipeline statistics ready.")
-
-                  addButton(root, "⚙ SETTINGS",
-                      "Settings opened.")
-
-                  activityLog = TextView(this)
-                  activityLog.text = "AGENT ACTIVITY\\nSystem initialized."
-                  activityLog.textSize = 14f
-                  activityLog.setTextColor(Color.WHITE)
-                  activityLog.setPadding(0, 28, 0, 10)
-                  root.addView(activityLog)
-
-                  scroll.addView(root)
-                  setContentView(scroll)
+              @Override
+              public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  prefs = getSharedPreferences("lakh", MODE_PRIVATE);
+                  loadLeads();
+                  dashboard();
               }
 
-              private fun addButton(
-                  parent: LinearLayout,
-                  label: String,
-                  message: String
-              ) {
-                  val button = Button(this)
-                  button.text = label
-                  button.textSize = 14f
-                  button.setOnClickListener {
-                      activityLog.text =
-                          "AGENT ACTIVITY\\n✓ $message\\n✓ AI Manager coordinating agents."
+              TextView text(String s, float size) {
+                  TextView t = new TextView(this);
+                  t.setText(s);
+                  t.setTextSize(size);
+                  t.setTextColor(WHITE);
+                  t.setPadding(0,8,0,8);
+                  return t;
+              }
+
+              Button button(String s, View.OnClickListener l) {
+                  Button b = new Button(this);
+                  b.setText(s);
+                  b.setTextSize(14);
+                  b.setTextColor(WHITE);
+                  b.setOnClickListener(l);
+                  b.setAllCaps(false);
+                  return b;
+              }
+
+              EditText input(String hint) {
+                  EditText e = new EditText(this);
+                  e.setHint(hint);
+                  e.setHintTextColor(MUTED);
+                  e.setTextColor(WHITE);
+                  e.setSingleLine(true);
+                  e.setPadding(18,10,18,10);
+                  return e;
+              }
+
+              void base(String title) {
+                  ScrollView scroll = new ScrollView(this);
+                  root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(22,25,22,30);
+                  root.setBackgroundColor(BG);
+
+                  TextView h = text(title,25);
+                  h.setTypeface(null, Typeface.BOLD);
+                  root.addView(h);
+
+                  scroll.addView(root);
+                  setContentView(scroll);
+              }
+
+              void dashboard() {
+                  base("LAKH LEAD AUTOMATON");
+
+                  TextView sub = text("AI Client Hunting • Lead Management",15);
+                  sub.setTextColor(MUTED);
+                  root.addView(sub);
+
+                  TextView status = text(
+                      paused ? "● AUTOMATION PAUSED" : "● AUTOMATION ACTIVE",16);
+                  status.setTextColor(paused ? RED : GREEN);
+                  root.addView(status);
+
+                  root.addView(button("🔎 Lead Hunter", v -> hunter()));
+                  root.addView(button("➕ Add Lead", v -> addLead()));
+                  root.addView(button("🎯 Lead Qualification", v -> qualification()));
+                  root.addView(button("✉ AI Outreach", v -> outreach()));
+                  root.addView(button("💬 AI Inbox", v -> inbox()));
+                  root.addView(button("🔥 HOT LEADS", v -> hotLeads()));
+                  root.addView(button("🔔 Follow-ups", v -> followups()));
+                  root.addView(button("📊 Analytics", v -> analytics()));
+                  root.addView(button(paused ? "▶ Resume Automation" : "⏸ Pause Automation",
+                      v -> {
+                          paused = !paused;
+                          log("Automation " + (paused ? "paused" : "resumed"));
+                          dashboard();
+                      }));
+                  root.addView(button("⚙ Settings", v -> settings()));
+
+                  log = text("AGENT ACTIVITY\n" + getLog(),14);
+                  log.setTextColor(MUTED);
+                  root.addView(log);
+              }
+
+              void hunter() {
+                  base("LEAD HUNTER");
+
+                  EditText type = input("Business type e.g. Cafe");
+                  EditText location = input("Location e.g. Los Angeles, CA");
+                  EditText target = input("Target client e.g. Owner");
+                  root.addView(type);
+                  root.addView(location);
+                  root.addView(target);
+
+                  root.addView(button("🔎 Search legitimate sources", v -> {
+                      String q = type.getText()+" "+location.getText()+" "+target.getText();
+                      Intent i = new Intent(Intent.ACTION_VIEW,
+                          Uri.parse("https://www.google.com/search?q="+
+                          Uri.encode(q)));
+                      startActivity(i);
+                      log("Lead research opened: "+q);
+                  }));
+
+                  root.addView(button("➕ Add researched lead", v -> addLead()));
+                  root.addView(button("← Dashboard", v -> dashboard()));
+              }
+
+              void addLead() {
+                  base("ADD LEAD");
+
+                  EditText name = input("Business name");
+                  EditText website = input("Website");
+                  EditText location = input("Location");
+                  EditText contact = input("Contact method / email");
+                  EditText score = input("Lead score 0-100");
+
+                  root.addView(name);
+                  root.addView(website);
+                  root.addView(location);
+                  root.addView(contact);
+                  root.addView(score);
+
+                  Spinner status = new Spinner(this);
+                  String[] states = {
+                      "New","Qualified","Interested","Maybe",
+                      "Follow-up","Not Interested","Won"
+                  };
+                  status.setAdapter(new ArrayAdapter<String>(
+                      this, android.R.layout.simple_spinner_dropdown_item, states));
+                  root.addView(status);
+
+                  root.addView(button("💾 SAVE LEAD", v -> {
+                      try {
+                          JSONObject x = new JSONObject();
+                          x.put("name",name.getText().toString());
+                          x.put("website",website.getText().toString());
+                          x.put("location",location.getText().toString());
+                          x.put("contact",contact.getText().toString());
+                          x.put("score",score.getText().toString());
+                          x.put("status",status.getSelectedItem().toString());
+                          leads.add(x);
+                          saveLeads();
+                          log("Lead saved: "+name.getText());
+                          dashboard();
+                      } catch(Exception e) {
+                          toast("Could not save lead");
+                      }
+                  }));
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void qualification() {
+                  base("LEAD QUALIFICATION");
+
+                  if(leads.size()==0) {
+                      root.addView(text("No leads yet. Add a lead first.",16));
                   }
 
-                  parent.addView(
-                      button,
-                      LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.WRAP_CONTENT
-                      )
-                  )
+                  for(JSONObject x: leads) {
+                      try {
+                          int score = 0;
+                          try { score = Integer.parseInt(x.optString("score","0")); }
+                          catch(Exception ignored){}
+
+                          String label =
+                              score >= 80 ? "🔥 HOT" :
+                              score >= 60 ? "🟡 GOOD" : "⚪ LOW";
+
+                          root.addView(text(
+                              x.optString("name")+
+                              "\nScore: "+score+" • "+label+
+                              "\nStatus: "+x.optString("status"),15));
+                      } catch(Exception ignored){}
+                  }
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void outreach() {
+                  base("AI OUTREACH");
+
+                  if(leads.size()==0) {
+                      root.addView(text("Add a lead first.",16));
+                      root.addView(button("← Dashboard",v -> dashboard()));
+                      return;
+                  }
+
+                  Spinner sp = new Spinner(this);
+                  ArrayList<String> names = new ArrayList<>();
+                  for(JSONObject x:leads) names.add(x.optString("name"));
+                  sp.setAdapter(new ArrayAdapter<String>(
+                      this, android.R.layout.simple_spinner_dropdown_item,names));
+                  root.addView(sp);
+
+                  TextView result = text("AI draft will appear here.",15);
+                  root.addView(result);
+
+                  root.addView(button("✨ GENERATE AI DRAFT",v -> {
+                      JSONObject x = leads.get(sp.getSelectedItemPosition());
+                      String prompt =
+                          "Write a short professional sales outreach message for business owner. "+
+                          "Business: "+x.optString("name")+
+                          ". Location: "+x.optString("location")+
+                          ". Website: "+x.optString("website")+
+                          ". Offer: AI lead automation. "+
+                          "Do not spam. Keep it personalized.";
+                      callGemini(prompt,result);
+                  }));
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void inbox() {
+                  base("AI INBOX");
+
+                  EditText reply = input("Paste client reply here");
+                  root.addView(reply);
+
+                  TextView result = text("Classification appears here.",15);
+                  root.addView(result);
+
+                  root.addView(button("🤖 CLASSIFY REPLY",v -> {
+                      String p =
+                          "Classify this business client reply into exactly one category: "+
+                          "Interested, Maybe, Not Interested, Follow-up. "+
+                          "Reply: "+reply.getText();
+                      callGemini(p,result);
+                  }));
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void hotLeads() {
+                  base("🔥 HOT LEADS");
+
+                  for(JSONObject x:leads) {
+                      try {
+                          int s = Integer.parseInt(x.optString("score","0"));
+                          if(s >= 80 || x.optString("status").equals("Interested")) {
+                              root.addView(text(
+                                  "🔥 "+x.optString("name")+
+                                  "\nScore: "+s+
+                                  "\n"+x.optString("contact"),16));
+                          }
+                      } catch(Exception ignored){}
+                  }
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void followups() {
+                  base("🔔 FOLLOW-UPS");
+
+                  for(JSONObject x:leads) {
+                      String s=x.optString("status");
+                      if(s.equals("Follow-up") || s.equals("Maybe")) {
+                          root.addView(text(
+                              "🔔 "+x.optString("name")+
+                              "\nStatus: "+s+
+                              "\nContact: "+x.optString("contact"),16));
+                      }
+                  }
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void analytics() {
+                  base("📊 ANALYTICS");
+
+                  int hot=0, interested=0, follow=0;
+                  for(JSONObject x:leads) {
+                      try {
+                          int s=Integer.parseInt(x.optString("score","0"));
+                          if(s>=80) hot++;
+                      } catch(Exception ignored){}
+
+                      if(x.optString("status").equals("Interested")) interested++;
+                      if(x.optString("status").equals("Follow-up")) follow++;
+                  }
+
+                  root.addView(text("Total Leads: "+leads.size(),18));
+                  root.addView(text("🔥 Hot Leads: "+hot,18));
+                  root.addView(text("Interested: "+interested,18));
+                  root.addView(text("Follow-ups: "+follow,18));
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void settings() {
+                  base("⚙ SETTINGS");
+
+                  EditText key = input("Gemini API key");
+                  key.setText(prefs.getString("gemini_key",""));
+                  root.addView(key);
+
+                  root.addView(button("💾 SAVE API KEY",v -> {
+                      prefs.edit().putString(
+                          "gemini_key",key.getText().toString()).apply();
+                      toast("API key saved");
+                      log("Gemini API key updated");
+                  }));
+
+                  root.addView(text(
+                      "The key is stored locally on this phone. "+
+                      "For a production client app, use a secure backend instead.",13));
+
+                  root.addView(button("← Dashboard",v -> dashboard()));
+              }
+
+              void callGemini(String prompt, TextView output) {
+                  String key=prefs.getString("gemini_key","").trim();
+
+                  if(key.isEmpty()) {
+                      output.setText("Add Gemini API key in Settings first.");
+                      return;
+                  }
+
+                  output.setText("AI working...");
+
+                  new Thread(() -> {
+                      try {
+                          URL url = new URL(
+                              "https://generativelanguage.googleapis.com/v1beta/models/"+
+                              "gemini-2.0-flash:generateContent?key="+
+                              URLEncoder.encode(key,"UTF-8"));
+
+                          HttpURLConnection c=(HttpURLConnection)url.openConnection();
+                          c.setRequestMethod("POST");
+                          c.setRequestProperty("Content-Type","application/json");
+                          c.setDoOutput(true);
+
+                          JSONObject body=new JSONObject();
+                          JSONArray contents=new JSONArray();
+                          JSONObject content=new JSONObject();
+                          JSONArray parts=new JSONArray();
+                          JSONObject part=new JSONObject();
+                          part.put("text",prompt);
+                          parts.put(part);
+                          content.put("parts",parts);
+                          contents.put(content);
+                          body.put("contents",contents);
+
+                          OutputStream os=c.getOutputStream();
+                          os.write(body.toString().getBytes("UTF-8"));
+                          os.close();
+
+                          InputStream is =
+                              c.getResponseCode() >= 400 ?
+                              c.getErrorStream() : c.getInputStream();
+
+                          BufferedReader br=new BufferedReader(
+                              new InputStreamReader(is));
+                          StringBuilder sb=new StringBuilder();
+                          String line;
+                          while((line=br.readLine())!=null) sb.append(line);
+                          br.close();
+
+                          JSONObject response=new JSONObject(sb.toString());
+
+                          String answer=response
+                              .getJSONArray("candidates")
+                              .getJSONObject(0)
+                              .getJSONObject("content")
+                              .getJSONArray("parts")
+                              .getJSONObject(0)
+                              .getString("text");
+
+                          runOnUiThread(() -> output.setText(answer));
+                          log("Gemini AI response generated");
+
+                      } catch(Exception e) {
+                          runOnUiThread(() ->
+                              output.setText("AI error: "+e.getMessage()));
+                      }
+                  }).start();
+              }
+
+              void saveLeads() {
+                  JSONArray a=new JSONArray();
+                  for(JSONObject x:leads) a.put(x);
+                  prefs.edit().putString("leads",a.toString()).apply();
+              }
+
+              void loadLeads() {
+                  try {
+                      JSONArray a=new JSONArray(
+                          prefs.getString("leads","[]"));
+                      for(int i=0;i<a.length();i++)
+                          leads.add(a.getJSONObject(i));
+                  } catch(Exception ignored){}
+              }
+
+              void log(String s) {
+                  String old=prefs.getString("log","");
+                  String n="✓ "+s+"\n"+old;
+                  if(n.length()>4000) n=n.substring(0,4000);
+                  prefs.edit().putString("log",n).apply();
+              }
+
+              String getLog() {
+                  return prefs.getString("log","System ready...");
+              }
+
+              void toast(String s) {
+                  Toast.makeText(this,s,Toast.LENGTH_SHORT).show();
               }
           }
           EOF
@@ -244,11 +572,11 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build APK
+      - name: Build real APK
         run: gradle assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Lakh-Lead-Automaton
+          name: Lakh-Lead-Automaton-APK
           path: app/build/outputs/apk/debug/app-debug.apk
